@@ -1,0 +1,72 @@
+name: Render analysis
+
+# Knits the main R Markdown document on every push/PR to verify the
+# pipeline is fully reproducible, and publishes the rendered HTML report
+# as a build artifact.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    env:
+      RENV_CONFIG_SANDBOX_ENABLED: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.4.1"
+          use-public-rspm: true
+
+      - name: Set up Pandoc
+        uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Install system dependencies for plotting packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libcurl4-openssl-dev libssl-dev libxml2-dev \
+            libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
+            libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
+
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: r-pkg-cache-${{ runner.os }}-${{ hashFiles('.github/workflows/render.yml') }}
+          restore-keys: |
+            r-pkg-cache-${{ runner.os }}-
+
+      - name: Install required R packages
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::rmarkdown
+            any::knitr
+            any::kableExtra
+            any::tidyverse
+            any::ggrepel
+            any::cowplot
+            any::scales
+            any::broom
+
+      - name: Knit main R Markdown document
+        run: |
+          Rscript -e 'rmarkdown::render("pangenome_recombination_conflict.Rmd", output_dir = ".")'
+
+      - name: Upload rendered report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-report
+          path: |
+            pangenome_recombination_conflict.html
+            figures/
