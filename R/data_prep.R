@@ -86,9 +86,11 @@ match_horsfield_to_taxa <- function(taxa, file1_df) {
                                        ~ mean(.x, na.rm = TRUE)))
 
     } else {
-      lookup_species <- dplyr::if_else(
-        taxon %in% names(species_rename), species_rename[[taxon]], taxon
-      )
+      lookup_species <- if (taxon %in% names(species_rename)) {
+        unname(species_rename[[taxon]])
+      } else {
+        taxon
+      }
       matched <- file1_df %>% dplyr::filter(Species == lookup_species)
       n_matched <- nrow(matched)
 
