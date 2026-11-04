@@ -72,6 +72,26 @@ ci_caption_note <- function(var_name) {
   }
 }
 
+#' Safely coerce a single numeric value to a short, always-valid, non-empty
+#' numeral string for embedding in a plotmath expression. Guards against
+#' NULL/zero-length/NA/NaN/Inf values (e.g. from a degenerate model fit)
+#' ever producing a malformed or truncated label string that would crash
+#' `parse()` at render time.
+safe_num <- function(x, digits = 2) {
+  if (is.null(x) || length(x) == 0 || is.na(x) || !is.finite(x)) return("NA")
+  formatC(signif(x, digits), format = "g", digits = digits)
+}
+
+#' Build a plotmath annotation label from a template and named numeric
+#' values, validating with parse() before use so that any unforeseen
+#' formatting issue degrades gracefully to a plain-text (unparsed) label
+#' rather than crashing ggplot's rendering step.
+safe_plotmath_label <- function(template, ..., digits = 2) {
+  label <- do.call(sprintf, c(list(template), lapply(list(...), safe_num, digits = digits)))
+  parse_ok <- tryCatch({ parse(text = label); TRUE }, error = function(e) FALSE)
+  list(label = label, parse = parse_ok)
+}
+
 # ---- Generic scatterplot with regression line + R^2/p annotation -----------
 #
 # Mirrors plot_rec_vs_element_model() from recombination-conflict, including
@@ -112,13 +132,15 @@ plot_correlation <- function(df,
   fit_summary <- broom::glance(fit)
   r2     <- fit_summary$r.squared
   p_val  <- fit_summary$p.value
-  r_val  <- sign(stats::coef(fit)[["x_fit"]]) * sqrt(r2)
+  slope  <- stats::coef(fit)[["x_fit"]]
+  r_val  <- if (is.null(slope) || is.na(slope) || is.na(r2)) NA_real_ else sign(slope) * sqrt(r2)
 
-  stat_label <- paste0(
-    "italic(r) == ", signif(r_val, 2),
-    "*'; '*italic(R)^2 == ", signif(r2, 2),
-    "*'; '*italic(p) == ", signif(p_val, 2)
+  stat_label_res <- safe_plotmath_label(
+    "italic(r) == %s*'; '*italic(R)^2 == %s*'; '*italic(p) == %s",
+    r_val, r2, p_val
   )
+  stat_label <- stat_label_res$label
+  stat_label_parse <- stat_label_res$parse
 
   p <- ggplot2::ggplot(
     plot_df,
@@ -161,9 +183,9 @@ plot_correlation <- function(df,
     ggplot2::labs(x = x_lab, y = y_lab) +
     ggplot2::annotate(
       "text",
-      x = stats::quantile(plot_df[[x_var]], 0.98, na.rm = TRUE),
-      y = stats::quantile(plot_df[[y_var]], 0.98, na.rm = TRUE),
-      label = stat_label, parse = TRUE, hjust = 1, size = 3.5
+      x = unname(stats::quantile(plot_df[[x_var]], 0.98, na.rm = TRUE)),
+      y = unname(stats::quantile(plot_df[[y_var]], 0.98, na.rm = TRUE)),
+      label = stat_label, parse = stat_label_parse, hjust = 1, size = 3.5
     ) +
     theme_conflict()
 
@@ -195,7 +217,11 @@ plot_violin_comparison <- function(df, x_var, y_var,
   y_vec <- plot_df[[y_var]]
 
   test_res <- stats::wilcox.test(y_vec ~ x_vec)
-  p_label <- paste0("Wilcoxon~rank~sum~test~italic(p) == ", signif(test_res$p.value, 3))
+  p_label_res <- safe_plotmath_label(
+    "Wilcoxon~rank~sum~test~italic(p) == %s", test_res$p.value, digits = 3
+  )
+  p_label <- p_label_res$label
+  p_label_parse <- p_label_res$parse
 
   p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[x_var]], y = .data[[y_var]])) +
     ggplot2::geom_violin(draw_quantiles = 0.5, alpha = 0.3, colour = "grey80") +
@@ -208,7 +234,7 @@ plot_violin_comparison <- function(df, x_var, y_var,
     ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.2))) +
     ggplot2::annotate(
       "text", x = Inf, y = Inf, label = p_label,
-      hjust = 1.05, vjust = 1.25, size = 3.5, parse = TRUE
+      hjust = 1.05, vjust = 1.25, size = 3.5, parse = p_label_parse
     ) +
     ggplot2::labs(x = x_lab, y = y_lab) +
     theme_conflict() +
