@@ -119,6 +119,39 @@ taxon-level values plus an annotated Wilcoxon test, which is the
 uncertainty representation used for categorical comparisons in the source
 `recombination-conflict` repository.
 
+## Plotting conventions
+
+- **One relationship per plot.** `Transformability` (colour) and `Niche`
+  (shape) are used purely to annotate individual points; they are never
+  used to sub-group the fitted regression. In `plot_correlation()`, the
+  reported *r*/*R*<sup>2</sup>/*p* come from a single `lm()` fit across all
+  taxa, and `geom_smooth()` is explicitly given `aes(group = 1)` so a
+  single overall trend line (with one shared standard-error ribbon) is
+  always drawn, rather than ggplot2 implicitly fitting one line per
+  colour/shape level (which happens by default whenever colour/shape are
+  mapped at the top level of `ggplot()` and inherited by `geom_smooth()`).
+- **Statistic annotation placement.** The *r*/*R*<sup>2</sup>/*p* label is
+  placed in the headroom created above the data (`y = Inf` with expanded
+  upper plot margin, centred horizontally), so it never collides with
+  points, error bars or the regression line regardless of whether the
+  relationship is positive or negative.
+- **Robust plotmath labels.** All parsed (`parse = TRUE`) plot annotations
+  are built via `safe_plotmath_label()`, which validates the constructed
+  expression with `parse()` before it reaches `ggplot2::annotate()`, and
+  falls back to a plain-text label if a value is ever `NA`/non-finite,
+  rather than letting a malformed label crash rendering.
+- **Axis truncation.** Where one or two taxa have a disproportionately wide
+  credible interval (e.g. `rate_genes1_median` for *H. influenzae* and
+  *Neisseria* spp.), the axis is visually truncated with
+  `coord_cartesian(xlim =, ylim =)` to keep the bulk of the points legible;
+  this only crops the *view* — the regression line and reported statistics
+  are always fitted to the complete, untruncated data, and this is noted
+  explicitly in the affected figure's caption.
+- **Legend layout.** Guide titles are placed *above* their (horizontal)
+  row of keys (`guide_legend(title.position = "top")`) rather than to the
+  left, which otherwise could make the combined legend wider than the
+  figure.
+
 ## Data provenance and merge logic
 
 - **Kwun & Croucher** data: taxon-level homologous recombination
