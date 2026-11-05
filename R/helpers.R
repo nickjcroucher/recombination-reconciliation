@@ -137,7 +137,7 @@ fit_simple_lm <- function(df, x_var, y_var) {
   model_df <- df %>%
     dplyr::filter(!is.na(.data[[x_var]]), !is.na(.data[[y_var]]))
 
-  mod   <- stats::lm(stats::reformulate(x_var, y_var), data = model_df)
+  mod <- stats::lm(stats::as.formula(paste0("`", y_var, "` ~ `", x_var, "`")), data = model_df)
   glance_df <- broom::glance(mod)
   cor_test  <- stats::cor.test(model_df[[x_var]], model_df[[y_var]])
 
