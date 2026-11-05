@@ -1,214 +1,178 @@
 # ---------------------------------------------------------------------------
-# Data preparation: build the two analysis datasets directly from the three
-# raw, unmodified source files in data/raw/:
+# R/data_prep.R
 #
-#   1. supplementary_file1_408species.csv
-#        Horsfield et al.'s Supplementary File 1 -- PopPUNK-mod pangenome
-#        dynamics parameters and pangenome composition statistics for 408
-#        bacterial species (one row per species).
+# Builds every analysis dataset used in pangenome_recombination_conflict.Rmd
+# directly from the three raw input files in data/raw/. No merged/derived
+# CSVs are stored in the repository - everything is recomputed on each knit.
 #
-#   2. supplementary_file8_negexp_fits.csv
-#        Horsfield et al.'s Supplementary File 8 -- negative-exponential
-#        core-vs-accessory pairwise distance curve fits (Equation 1:
-#        y = i - (i - j)e^(-kx)) for 22 species/datasets, in long format
-#        (one row per Species x Coefficient).
+# Inputs (data/raw/):
+#   - supplementary_file1_408species.csv        Horsfield et al., Supplementary File 1
+#                                                (408-species PopPUNK-mod parameter estimates
+#                                                 and pangenome statistics)
+#   - supplementary_file8_negexp_fits.csv        Horsfield et al., Supplementary File 8
+#                                                (negative-exponential curve fits: Y-intercept,
+#                                                 Plateau, Rate ratio, for 22 species + 1 extra
+#                                                 S. pneumoniae local-sample fit)
+#   - recombination_conflict_comparison_plot.csv Kwun & Croucher, Figure 2 source data
+#                                                (23 taxa: HR probability from MLST, and
+#                                                 geNomad-detected intact Caudoviricetes
+#                                                 prophage counts per isolate, fitted as a
+#                                                 Poisson rate lambda_hat)
 #
-#   3. recombination_conflict_comparison_plot.csv
-#        Kwun & Croucher's per-taxon output (n = 23 taxa) from their
-#        https://github.com/nickjcroucher/recombination-conflict pipeline:
-#        geNomad Caudoviricetes prophage density (lambda_hat, Poisson MLE +
-#        95% CI) and the probability of diversification through homologous
-#        recombination (Recombination probability, from the MLST-based
-#        beta-binomial GLMM + asymptotic CI), together with Transformability
-#        and Niche annotations.
-#
-# No pre-merged CSV is stored in the repository: build_analysis_datasets()
-# performs the full taxon-matching/aggregation logic below every time the
-# Rmd is knitted, so the merge is transparent and reproducible from the
-# original supplementary files alone.
+# IMPORTANT SCOPE NOTE: "prophage" throughout this analysis refers specifically to
+# geNomad-detected, hallmark-gene-rich Caudoviricetes provirus regions - i.e. large,
+# likely-intact temperate phage capable of causing lytic induction and cell death.
+# Satellite phage/phage-related chromosomal islands (e.g. PRCIs), inoviruses, and
+# plasmids were explicitly excluded from Kwun & Croucher's cross-taxon genomic
+# comparison (Fig. 2A) and are therefore also excluded here.
 # ---------------------------------------------------------------------------
 
-suppressPackageStartupMessages({
-  library(tidyverse)
-})
-
-# Numeric Horsfield et al. columns (Supplementary File 1) carried through
-# into the merged dataset.
-horsfield_vars <- c(
-  "rate_genes1_median", "rate_genes1_lower_CI", "rate_genes1_upper_CI",
-  "core_mu_median",     "core_mu_lower_CI",     "core_mu_upper_CI",
-  "prop_genes2_median", "prop_genes2_lower_CI", "prop_genes2_upper_CI",
-  "generalism_score",   "habitat_count",        "pangenome_fluidity",
-  "percentage_core_100", "percentage_core_90",  "percentage_core_80",
-  "percentage_accessory_20", "percentage_accessory_10",
-  "pan_size (Dewar et al)", "accessory_90", "accessory_80",
-  "Ne", "genome_size", "Number_of_Strain",
-  "pan_genes", "core_genes", "intermediate_genes", "rare_genes",
-  "avg_gene_freq"
+#' Build a lookup from a Species binomial/"spp" label (as used in the
+#' recombination-conflict comparison dataset) to a species or genus label as
+#' used in Supplementary File 1 (Horsfield et al.)
+genus_level_taxa <- c(
+  "Campylobacter spp", "Citrobacter spp", "Enterobacter spp",
+  "Neisseria spp", "Proteus spp", "Serratia spp"
 )
 
-# ---- Taxon matching between Kwun & Croucher's 23 taxa and Horsfield et
-# al.'s Supplementary File 1 ------------------------------------------------
-#
-# Most of the 23 taxa match a single species' row directly by binomial name.
-# Genus-level ("spp.") taxa are matched by taking the unweighted mean across
-# all matching species present in Supplementary File 1 for that genus.
-# Enterococcus faecium is recorded under the GTDB-style label
-# "Enterococcus_B faecium" in Supplementary File 1.
-
-genus_mean_taxa <- c(
-  "Campylobacter spp" = "Campylobacter",
-  "Citrobacter spp"   = "Citrobacter",
-  "Enterobacter spp"  = "Enterobacter",
-  "Neisseria spp"     = "Neisseria",
-  "Proteus spp"       = "Proteus",
-  "Serratia spp"      = "Serratia"
-)
-
-species_rename <- c(
+# Enterococcus faecium is recorded under the GTDB-style genus label
+# "Enterococcus_B" in Supplementary File 1
+species_rename <- list(
   "Enterococcus faecium" = "Enterococcus_B faecium"
 )
 
-#' Match each of Kwun & Croucher's 23 taxa to Horsfield et al.'s
-#' Supplementary File 1, averaging across species for genus-level taxa.
-match_horsfield_to_taxa <- function(taxa, file1_df) {
+#' Match each of the 23 taxa in the HR/prophage comparison dataset to
+#' Supplementary File 1, averaging across member species for genus-level
+#' ("spp") taxa, and renaming where GTDB taxonomy differs from the binomial
+#' used by Kwun & Croucher.
+match_horsfield_to_taxa <- function(taxon_vec, file1_df) {
 
-  purrr::map_dfr(taxa, function(taxon) {
+  numeric_cols <- names(file1_df)[vapply(file1_df, is.numeric, logical(1))]
 
-    if (taxon %in% names(genus_mean_taxa)) {
-      # Genus-level ("spp.") taxon: mean across all matching species
-      genus <- genus_mean_taxa[[taxon]]
-      matched <- file1_df %>% dplyr::filter(Genus == genus)
-      n_matched <- nrow(matched)
+  purrr::map_dfr(unique(taxon_vec), function(taxon) {
 
-      summary_row <- matched %>%
-        dplyr::summarise(dplyr::across(dplyr::all_of(horsfield_vars),
-                                       ~ mean(.x, na.rm = TRUE)))
+    is_genus_level <- taxon %in% genus_level_taxa
 
+    if (is_genus_level) {
+      genus <- sub(" spp$", "", taxon)
+      matched_rows <- file1_df %>% dplyr::filter(Genus == genus)
     } else {
-      lookup_species <- if (taxon %in% names(species_rename)) {
-        unname(species_rename[[taxon]])
+      # Scalar lookup: must use a plain if/else here, NOT a vectorised
+      # dplyr::if_else(), since the RHS species_rename[[taxon]] throws
+      # "subscript out of bounds" for any taxon not present in the lookup
+      # list, and if_else() evaluates both branches for every element.
+      if (taxon %in% names(species_rename)) {
+        lookup_species <- unname(species_rename[[taxon]])
       } else {
-        taxon
+        lookup_species <- taxon
       }
-      matched <- file1_df %>% dplyr::filter(Species == lookup_species)
-      n_matched <- nrow(matched)
-
-      summary_row <- matched %>%
-        dplyr::summarise(dplyr::across(dplyr::all_of(horsfield_vars),
-                                       ~ mean(.x, na.rm = TRUE)))
+      matched_rows <- file1_df %>% dplyr::filter(Species == lookup_species)
     }
 
-    summary_row %>%
-      dplyr::mutate(species = taxon, n_species_matched = n_matched,
-                    .before = 1)
+    if (nrow(matched_rows) == 0) {
+      return(tibble::tibble(species = taxon, n_matched = 0L))
+    }
+
+    summarised <- matched_rows %>%
+      dplyr::summarise(dplyr::across(dplyr::all_of(numeric_cols), ~ mean(.x, na.rm = TRUE)))
+
+    dplyr::bind_cols(
+      tibble::tibble(species = taxon, n_matched = nrow(matched_rows)),
+      summarised
+    )
   })
 }
 
-# ---- Taxon matching between Kwun & Croucher's 23 taxa and Horsfield et
-# al.'s Supplementary File 8 (negative-exponential curve fits) -------------
-#
-# Supplementary File 8 uses abbreviated binomials (e.g. "E. coli") for a
-# different set of 22 species/datasets. Only 15 of the 23 taxa have a
-# match: 12 direct one-to-one matches, S. pneumoniae (averaged across the
-# "Global" and "Local" fits), and two genus-level matches (Campylobacter
-# spp -> C. jejuni only; Neisseria spp -> mean of N. gonorrhoeae and
-# N. meningitidis).
-
-negexp_direct_map <- c(
-  "A. baumanii"    = "Acinetobacter baumannii",
-  "E. coli"        = "Escherichia coli",
-  "E. faecalis"    = "Enterococcus faecalis",
-  "H. influenzae"  = "Haemophilus influenzae",
-  "H. pylori"      = "Helicobacter pylori",
-  "K. pneumoniae"  = "Klebsiella pneumoniae",
-  "M. catarrhalis" = "Moraxella catarrhalis",
-  "P. aeruginosa"  = "Pseudomonas aeruginosa",
-  "S. enterica"    = "Salmonella enterica",
-  "S. aureus"      = "Staphylococcus aureus",
-  "S. agalactiae"  = "Streptococcus agalactiae",
-  "S. pyogenes"    = "Streptococcus pyogenes"
+#' Match the 23-taxon comparison dataset to Supplementary File 8
+#' (negative-exponential fits). Only a subset of taxa have a corresponding
+#' fit; "spp" taxa are matched by averaging across any member species
+#' present, and S. pneumoniae is averaged across its Global/Local fits.
+negexp_species_map <- list(
+  "Acinetobacter baumannii"   = c("A. baumanii"),
+  "Bacillus subtilis"         = c(),  # no File 8 entry
+  "Campylobacter spp"         = c("C. jejuni"),
+  "Citrobacter spp"           = c(),
+  "Enterobacter spp"          = c(),
+  "Enterococcus faecalis"     = c("E. faecalis"),
+  "Enterococcus faecium"      = c(),
+  "Escherichia coli"          = c("E. coli"),
+  "Haemophilus influenzae"    = c("H. influenzae"),
+  "Helicobacter pylori"       = c("H. pylori"),
+  "Klebsiella pneumoniae"     = c("K. pneumoniae"),
+  "Moraxella catarrhalis"     = c("M. catarrhalis"),
+  "Morganella morganii"       = c(),
+  "Neisseria spp"             = c("N. gonorrhoeae", "N. meningitidis"),
+  "Proteus spp"               = c(),
+  "Pseudomonas aeruginosa"    = c("P. aeruginosa"),
+  "Salmonella enterica"       = c("S. enterica"),
+  "Serratia spp"              = c(),
+  "Staphylococcus aureus"     = c("S. aureus"),
+  "Streptococcus agalactiae"  = c("S. agalactiae"),
+  "Streptococcus pneumoniae"  = c("S. pneumoniae (Global)", "S. pneumoniae (Local)"),
+  "Streptococcus pyogenes"    = c("S. pyogenes"),
+  "Vibrio cholerae"           = c()
 )
 
-negexp_averaged_map <- list(
-  "Streptococcus pneumoniae" = c("S. pneumoniae (Global)", "S. pneumoniae (Local)"),
-  "Neisseria spp"            = c("N. gonorrhoeae", "N. meningitidis"),
-  "Campylobacter spp"        = c("C. jejuni")
-)
+match_negexp_to_taxa <- function(taxon_vec, file8_df) {
 
-#' Pivot Supplementary File 8 to one row per File 8 "species" label, with
-#' Plateau (i), Rate ratio (k) and Y-intercept (j) as columns.
-widen_negexp <- function(file8_df) {
-  file8_df %>%
-    dplyr::select(Species, Coefficient, Estimate) %>%
-    tidyr::pivot_wider(names_from = Coefficient, values_from = Estimate)
-}
-
-#' Match Kwun & Croucher taxa to Horsfield et al.'s negative-exponential
-#' curve fits (Supplementary File 8), returning only the taxa with a match.
-match_negexp_to_taxa <- function(negexp_wide) {
-
-  direct_df <- tibble::tibble(
-    file8_species = names(negexp_direct_map),
-    species        = unname(negexp_direct_map)
-  ) %>%
-    dplyr::inner_join(negexp_wide, by = c("file8_species" = "Species")) %>%
-    dplyr::select(-file8_species)
-
-  averaged_df <- purrr::imap_dfr(negexp_averaged_map, function(labels, taxon) {
-    negexp_wide %>%
-      dplyr::filter(Species %in% labels) %>%
-      dplyr::summarise(
-        `Plateau (i)`    = mean(`Plateau (i)`, na.rm = TRUE),
-        `Rate ratio (k)` = mean(`Rate ratio (k)`, na.rm = TRUE),
-        `Y-intercept (j)`= mean(`Y-intercept (j)`, na.rm = TRUE)
-      ) %>%
-      dplyr::mutate(species = taxon, .before = 1)
-  })
-
-  dplyr::bind_rows(direct_df, averaged_df)
-}
-
-# ---- Top-level entry point -------------------------------------------------
-
-#' Build the two taxon-level analysis datasets directly from the three raw
-#' source files.
-#'
-#' @return a list with elements `main_df` (n = 23 taxa: Kwun & Croucher's HR
-#'   probability and prophage density joined to Horsfield et al.'s
-#'   pangenome-dynamics parameters) and `negexp_df` (the n = 15 subset of
-#'   `main_df` additionally joined to the negative-exponential curve fit
-#'   parameters, with `Y-intercept x genome size` pre-computed).
-build_analysis_datasets <- function(
-    file1_path  = "data/raw/supplementary_file1_408species.csv",
-    file8_path  = "data/raw/supplementary_file8_negexp_fits.csv",
-    plot_path   = "data/raw/recombination_conflict_comparison_plot.csv"
-) {
-
-  rec_df <- readr::read_csv(plot_path, show_col_types = FALSE)
-
-  file1_df <- readr::read_csv(file1_path, show_col_types = FALSE)
-
-  file8_df <- readr::read_csv(file8_path, show_col_types = FALSE)
-
-  # --- Merge 1: Kwun & Croucher taxa <- Horsfield et al. pangenome params
-  horsfield_df <- match_horsfield_to_taxa(rec_df$species, file1_df)
-
-  main_df <- rec_df %>%
-    dplyr::left_join(horsfield_df, by = "species") %>%
-    dplyr::mutate(
-      Transformability = factor(Transformability,
-                                levels = c("Transformable", "Non-transformable")),
-      Niche = factor(Niche)
+  file8_wide <- file8_df %>%
+    dplyr::select(Species, Coefficient, Estimate, `Upper 95% CI`, `Lower CI`) %>%
+    tidyr::pivot_wider(
+      names_from  = Coefficient,
+      values_from = c(Estimate, `Upper 95% CI`, `Lower CI`),
+      names_glue  = "{Coefficient}_{.value}"
     )
 
-  # --- Merge 2: subset of taxa <- Horsfield et al. negative-exponential fits
-  negexp_wide <- widen_negexp(file8_df)
-  negexp_match_df <- match_negexp_to_taxa(negexp_wide)
+  numeric_cols <- names(file8_wide)[vapply(file8_wide, is.numeric, logical(1))]
 
-  negexp_df <- main_df %>%
-    dplyr::inner_join(negexp_match_df, by = "species") %>%
-    dplyr::mutate(`Y-intercept x genome size` = `Y-intercept (j)` * genome_size)
+  purrr::map_dfr(unique(taxon_vec), function(taxon) {
 
-  list(main_df = main_df, negexp_df = negexp_df)
+    member_species <- negexp_species_map[[taxon]]
+    if (is.null(member_species) || length(member_species) == 0) {
+      return(NULL)
+    }
+
+    matched_rows <- file8_wide %>% dplyr::filter(Species %in% member_species)
+    if (nrow(matched_rows) == 0) return(NULL)
+
+    summarised <- matched_rows %>%
+      dplyr::summarise(dplyr::across(dplyr::all_of(numeric_cols), ~ mean(.x, na.rm = TRUE)))
+
+    dplyr::bind_cols(tibble::tibble(species = taxon), summarised)
+  })
+}
+
+#' Master function: builds both analysis datasets from the three raw files.
+#'
+#' Returns a list with:
+#'   full_df   - the 23-taxon HR/prophage dataset merged with Supplementary
+#'               File 1 pangenome/PopPUNK-mod parameters
+#'   negexp_df - the subset (n=15) of full_df additionally merged with
+#'               Supplementary File 8 negative-exponential fit parameters,
+#'               plus a genome-size-scaled Y-intercept column
+build_analysis_datasets <- function(raw_dir = "data/raw") {
+
+  rec_df   <- readr::read_csv(file.path(raw_dir, "recombination_conflict_comparison_plot.csv"),
+                              show_col_types = FALSE)
+  file1_df <- readr::read_csv(file.path(raw_dir, "supplementary_file1_408species.csv"),
+                              show_col_types = FALSE)
+  file8_df <- readr::read_csv(file.path(raw_dir, "supplementary_file8_negexp_fits.csv"),
+                              show_col_types = FALSE)
+
+  horsfield_matched <- match_horsfield_to_taxa(rec_df$species, file1_df)
+
+  full_df <- rec_df %>%
+    dplyr::left_join(horsfield_matched, by = "species")
+
+  negexp_matched <- match_negexp_to_taxa(rec_df$species, file8_df)
+
+  negexp_df <- full_df %>%
+    dplyr::inner_join(negexp_matched, by = "species") %>%
+    dplyr::mutate(
+      yint_times_genome       = `Y-intercept (j)_Estimate`       * genome_size,
+      yint_times_genome_lwr   = `Y-intercept (j)_Lower CI`       * genome_size,
+      yint_times_genome_upr   = `Y-intercept (j)_Upper 95% CI`   * genome_size
+    )
+
+  list(full_df = full_df, negexp_df = negexp_df)
 }

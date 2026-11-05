@@ -1,6 +1,7 @@
 ---
 title: "Testing whether the homologous recombination / prophage conflict explains pangenome-scale variation"
-author: "Reproducible analysis companion to Horsfield *et al.* and Kwun & Croucher"
+subtitle: "Reproducible analysis companion to Horsfield et al. and Kwun & Croucher"
+author: "Nicholas Croucher"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -10,310 +11,452 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  echo = TRUE,
-  message = FALSE,
-  warning = FALSE,
-  cache = FALSE,
-  fig.path = "figures/"
-)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.align = "center", cache = FALSE)
 
 library(tidyverse)
 library(ggrepel)
 library(cowplot)
-library(scales)
+library(broom)
 library(knitr)
 library(kableExtra)
-library(broom)
+library(scales)
 
-source("R/helpers.R")
 source("R/data_prep.R")
+source("R/helpers.R")
 ```
 
-# Background
+## Background
 
-This repository reproduces the comparison analysis testing whether the
-negative association between **homologous recombination (HR)** rate and
-**prophage density**, reported across 23 bacterial taxa by
-[Kwun & Croucher (2026)](https://doi.org/10.1093/ismejo/wrag256), can explain
-the large-scale pangenome structure variation described across the bacterial
-domain by
-[Horsfield *et al.*](https://doi.org/10.64898/2026.02.04.703695)
-(*Pansim*/*PopPUNK-mod*).
+[Horsfield et al.](https://doi.org/10.64898/2026.02.04.703695) fitted a mechanistic
+pangenome model (Pansim/PopPUNK-mod) to 408 bacterial species, estimating three
+parameters per species: **basal gene turnover rate** (the minimum rate at which
+accessory genes are gained/lost), **core mutation rate**, and the **proportion of
+fast genes** (the fraction of the accessory genome exchanged essentially
+instantaneously each generation). They found that inter-species differences in
+pangenome size and structure are driven predominantly by variation in the
+*proportion* of rapidly-exchanged genes, with the *rate* of exchange of the
+remaining ("slow") genes conserved across species, and that this variation tracks
+phylogeny rather than ecology.
 
-No pre-merged CSV is stored in this repository. Instead, all merging is
-performed live from **three raw, unmodified source files** in
-`data/raw/` by `R/data_prep.R::build_analysis_datasets()`:
+[Kwun & Croucher](https://doi.org/10.1093/ismejo/wrag256) proposed and tested a
+distinct mechanistic explanation for cross-taxon variation in genome plasticity:
+an intragenomic conflict between homologous recombination (HR), which transformable
+bacteria can use to delete chromosomally-integrated mobile genetic elements, and
+prophage, which have evolved to detect and escape RecA-nucleoprotein filaments by
+inducing lytic activation. Across 23 bacterial taxa, they found a significant
+negative relationship between the probability of diversification through HR
+(estimated from MLST data) and the expected number of intact prophage per genome
+(estimated from complete genome assemblies).
 
-- `supplementary_file1_408species.csv` — Horsfield *et al.*'s
-  **Supplementary File 1**: PopPUNK-mod pangenome-dynamics parameters and
-  pangenome composition statistics for 408 bacterial species (one row per
-  species).
-- `supplementary_file8_negexp_fits.csv` — Horsfield *et al.*'s
-  **Supplementary File 8**: negative-exponential core-vs-accessory pairwise
-  distance curve fits (Plateau, Rate ratio, Y-intercept; their Equation 1)
-  for 22 species/datasets, in long format.
-- `recombination_conflict_comparison_plot.csv` — Kwun & Croucher's own
-  per-taxon output (n = 23 taxa) giving the geNomad Caudoviricetes
-  prophage density (`lambda_hat`, Poisson MLE + 95% CI) and the
-  probability of diversification through homologous recombination
-  (`Recombination probability`, from their MLST-based beta-binomial GLMM +
-  asymptotic CI), together with `Transformability` and `Niche`
-  annotations, produced directly by their
-  [recombination-conflict](https://github.com/nickjcroucher/recombination-conflict)
-  pipeline.
+This document tests the hypothesis that **the HR/prophage conflict identified by
+Kwun & Croucher can explain the pangenome-scale variation reported by Horsfield et
+al.** by merging the 23-taxon HR/prophage dataset with the corresponding
+PopPUNK-mod parameter estimates, pangenome-size statistics, and (where available)
+negative-exponential core-vs-accessory distance curve fits, from Horsfield et al.'s
+Supplementary Files 1 and 8.
 
-`build_analysis_datasets()` joins these three files together, taking
-species-level means across constituent species for genus-level ("spp.")
-taxa, and matching *Enterococcus faecium* to the GTDB-style label
-`Enterococcus_B faecium` used in Supplementary File 1 (see
-`data/README.md` for full details of the matching logic).
+::: {.callout-note style="border-left: 4px solid #4C72B0; padding: 0.5em 1em; background: #f4f8fc;"}
+**Scope of "prophage" in this analysis.** Throughout, prophage content refers
+specifically to Kwun & Croucher's geNomad-based estimate of the expected number of
+large, hallmark-gene-rich **Caudoviricetes** provirus regions per genome (`lambda_hat`)
+— i.e. temperate phage plausibly capable of lytic induction and host-cell death, the
+process through which HR and prophage are hypothesised to conflict. Satellite
+phage/phage-related chromosomal islands (e.g. PRCIs), *Inoviridae*, and plasmids were
+excluded from Kwun & Croucher's cross-taxon genomic comparison and are therefore
+also excluded from every analysis below. Pangenome-size statistics will necessarily
+also reflect the contribution of these other mobile genetic element classes, which
+are not independently modelled here.
+:::
 
 ```{r load-data}
-datasets <- build_analysis_datasets(
-  file1_path = "data/raw/supplementary_file1_408species.csv",
-  file8_path = "data/raw/supplementary_file8_negexp_fits.csv",
-  plot_path  = "data/raw/recombination_conflict_comparison_plot.csv"
-)
-
-main_df   <- datasets$main_df
-negexp_df <- datasets$negexp_df
+datasets  <- build_analysis_datasets(raw_dir = "data/raw")
+full_df   <- datasets$full_df     # all 23 taxa, merged with Supplementary File 1
+negexp_df <- datasets$negexp_df   # 15 taxa with a Supplementary File 8 curve fit
 ```
 
-## Taxa included
-
-`main_df` contains all 23 taxa for which Kwun & Croucher estimated both
-prophage density and HR probability, each joined to its corresponding
-Horsfield *et al.* pangenome-dynamics parameters. `n_species_matched`
-records how many Supplementary File 1 species rows contributed to each
-taxon's values (> 1 for the genus-level "spp." taxa, which are
-unweighted means across their constituent species).
+### Taxa included
 
 ```{r taxa-table}
-main_df %>%
-  dplyr::mutate(
-    Species = display %>%
-      stringr::str_replace("italic\\('([^']+)'\\)~'spp\\.'", "\\1 spp.") %>%
-      stringr::str_replace("italic\\('([^']+)'\\)", "\\1")
+full_df %>%
+  dplyr::arrange(dplyr::desc(lambda_hat)) %>%
+  dplyr::transmute(
+    Taxon                        = species,
+    Transformability,
+    Niche,
+    `Isolates (n)`                = n_isolates,
+    `Expected prophage / genome`  = round(lambda_hat, 2),
+    `HR probability`              = round(`Recombination probability`, 2),
+    `Pangenome size (pan_genes)`  = pan_genes
   ) %>%
-  dplyr::select(Species, Transformability, Niche,
-               lambda_hat, `Recombination probability`, n_species_matched) %>%
-  dplyr::arrange(Species) %>%
-  dplyr::rename(
-    `Prophage density (lambda_hat)` = lambda_hat,
-    `HR probability` = `Recombination probability`,
-    `Species averaged (Supp. File 1)` = n_species_matched
-  ) %>%
-  knitr::kable(digits = 3) %>%
-  kableExtra::kable_styling(bootstrap_options = "striped", full_width = FALSE)
+  kable(caption = "23 taxa common to the Kwun & Croucher HR/prophage comparison and Horsfield et al.'s Supplementary File 1, ranked by expected prophage burden.") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE) %>%
+  scroll_box(height = "420px")
 ```
 
-A further 8 of the 23 taxa (*Bacillus subtilis*, *Citrobacter* spp.,
-*Enterobacter* spp., *Enterococcus faecium*, *Morganella morganii*,
-*Proteus* spp., *Serratia* spp. and *Vibrio cholerae*) have no
-corresponding entry in Horsfield *et al.*'s Supplementary File 8 and are
-therefore absent from `negexp_df` (n = 15), used in the Y-intercept
-analysis below.
+## 1. Pangenome size tracks prophage density
 
-# Pangenome size tracks prophage density, not HR
+If prophage accumulation is a major contributor to pangenome expansion - as would
+be expected if reduced HR allows mobile genetic elements to accumulate unchecked -
+then taxa with a higher expected prophage burden should have larger pangenomes.
 
-```{r pan-genes-vs-lambda, fig.width = 8, fig.height = 6}
-pan_vs_lambda <- plot_correlation(
-  main_df,
+```{r pan-genes-vs-lambda, fig.width = 7, fig.height = 5.5}
+res_pangenome <- plot_correlation(
+  full_df,
   x_var = "lambda_hat", y_var = "pan_genes",
-  x_lab = "Expected number of prophage per isolate (lambda_hat)",
-  y_lab = "Pangenome size (pan_genes)"
+  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
+  y_lab = "Pangenome size (total genes)"
 )
-pan_vs_lambda$plot
+res_pangenome$plot
 ```
-*`r pan_vs_lambda$caption_note`*
 
-```{r rare-genes-vs-lambda, fig.width = 8, fig.height = 6}
-rare_vs_lambda <- plot_correlation(
-  main_df,
+**Figure 1.** Pangenome size (`pan_genes`, Horsfield et al. Supplementary File 1) is
+strongly, positively associated with prophage density (`lambda_hat`, Kwun & Croucher).
+Horizontal error bars show the 95% CI of the Poisson-fitted prophage rate;
+Horsfield et al. report `pan_genes` as a point estimate with no corresponding
+uncertainty, so no vertical error bars are shown.
+
+```{r pan-genes-vs-lambda-inline, include=FALSE}
+fit_pangenome <- res_pangenome$fit
+```
+
+Pangenome size and prophage density are strongly correlated
+(*r* = `r round(fit_pangenome$r, 2)`, *R*^2^ = `r round(fit_pangenome$r2, 2)`,
+*p* = `r format(fit_pangenome$p_value, digits = 2, scientific = TRUE)`, *n* =
+`r fit_pangenome$n`) - taxa with more intact prophage per genome have
+systematically larger pangenomes.
+
+### Supplementary analyses: rare genes and transformability
+
+The same relationship holds for the count of rare accessory genes specifically
+(Supplementary Figure S1), and naturally transformable taxa - which are expected to
+experience more effective chromosomal curing - have significantly smaller
+pangenomes on average, although this difference does not persist once prophage
+density is accounted for (Supplementary Figure S2).
+
+```{r rare-genes-vs-lambda, fig.width = 7, fig.height = 5.5}
+res_raregenes <- plot_correlation(
+  full_df,
   x_var = "lambda_hat", y_var = "rare_genes",
-  x_lab = "Expected number of prophage per isolate (lambda_hat)",
+  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
   y_lab = "Number of rare accessory genes"
 )
-rare_vs_lambda$plot
+res_raregenes$plot
+fit_raregenes <- res_raregenes$fit
 ```
-*`r rare_vs_lambda$caption_note`*
 
-By contrast, HR probability is weakly *negatively* associated with
-pangenome size — the opposite of what would be expected if HR itself
-inflated the pangenome:
+**Supplementary Figure S1.** Prophage density correlates similarly strongly with
+the count of rare accessory genes (*r* = `r round(fit_raregenes$r, 2)`, *p* =
+`r format(fit_raregenes$p_value, digits = 2, scientific = TRUE)`), consistent with
+prophage themselves populating the low-frequency tail of the accessory gene
+frequency distribution. As in Figure 1, only `lambda_hat` carries a reported 95%
+CI, shown as horizontal error bars.
 
-```{r pan-genes-vs-HR, fig.width = 8, fig.height = 6}
-pan_vs_hr <- plot_correlation(
-  main_df,
-  x_var = "Recombination probability", y_var = "pan_genes",
-  x_lab = "Probability of diversification through HR",
-  y_lab = "Pangenome size (pan_genes)"
-)
-pan_vs_hr$plot
-```
-*`r pan_vs_hr$caption_note`*
-
-# The proportion of rapidly-exchanged genes and basal turnover rate are best explained by HR
-
-```{r propfast-vs-HR, fig.width = 8, fig.height = 6}
-propfast_vs_hr <- plot_correlation(
-  main_df,
-  x_var = "Recombination probability", y_var = "prop_genes2_median",
-  x_lab = "Probability of diversification through HR",
-  y_lab = "Proportion of rapidly-exchanged ('fast') genes"
-)
-propfast_vs_hr$plot
-```
-*`r propfast_vs_hr$caption_note`*
-
-`rate_genes1_median`'s 95% credible interval is extremely wide for a small
-number of taxa (most notably *Haemophilus influenzae* and *Neisseria* spp.),
-which otherwise stretches the vertical axis so far that the bulk of the
-points become compressed into a narrow band at the bottom of the plot. The
-axis below is therefore truncated (zoomed in on the bulk of the data) to
-emphasise the individual points and their error bars; the regression line
-and the reported *r*, *R*<sup>2</sup> and *p* are still fitted to the full,
-untruncated data (see caption).
-
-```{r baseturnover-vs-HR, fig.width = 8, fig.height = 6}
-baseturnover_vs_hr <- plot_correlation(
-  main_df,
-  x_var = "Recombination probability", y_var = "rate_genes1_median",
-  x_lab = "Probability of diversification through HR",
-  y_lab = "Basal gene turnover rate",
-  ylim = c(0, 0.0025)
-)
-baseturnover_vs_hr$plot
-```
-*`r baseturnover_vs_hr$caption_note`*
-
-# Core mutation rate is only weakly, and non-robustly, related to HR
-
-```{r coremu-vs-HR, fig.width = 8, fig.height = 6}
-coremu_vs_hr <- plot_correlation(
-  main_df,
-  x_var = "Recombination probability", y_var = "core_mu_median",
-  x_lab = "Probability of diversification through HR",
-  y_lab = "Core mutation rate"
-)
-coremu_vs_hr$plot
-```
-*`r coremu_vs_hr$caption_note`*
-
-# Genome-size-scaled Y-intercept of the core/accessory distance curve tracks prophage density
-
-Multiplying the fitted Y-intercept (instantaneous gene turnover rate) from
-the negative-exponential core-vs-accessory distance regression by genome
-size gives a substantially stronger relationship with `lambda_hat` than the
-raw Y-intercept alone (see analysis notes in `README.md`).
-
-```{r yintercept-vs-lambda, fig.width = 8, fig.height = 6}
-yint_vs_lambda <- plot_correlation(
-  negexp_df,
-  x_var = "lambda_hat", y_var = "Y-intercept x genome size",
-  x_lab = "Expected number of prophage per isolate (lambda_hat)",
-  y_lab = "Y-intercept x genome size"
-)
-yint_vs_lambda$plot
-```
-*`r yint_vs_lambda$caption_note`* The negative-exponential curve fit
-(`Plateau (i)`, `Rate ratio (k)`, `Y-intercept (j)`) was reported by
-Horsfield *et al.* as point estimates only, with no confidence intervals
-available in the source supplementary data, so horizontal error bars for
-`lambda_hat` are shown but vertical error bars for the derived
-`Y-intercept x genome size` quantity cannot be added without fabricating
-uncertainty that was not reported.
-
-# Naturally transformable taxa have smaller pangenomes, but this tracks their lower prophage burden
-
-```{r transformability-pangenome, fig.width = 6, fig.height = 6}
-transformability_pangenome <- plot_violin_comparison(
-  main_df,
+```{r transformability-vs-pangenome, fig.width = 7, fig.height = 5}
+res_transf_violin <- plot_violin_comparison(
+  full_df,
   x_var = "Transformability", y_var = "pan_genes",
-  x_lab = "Transformability", y_lab = "Pangenome size (pan_genes)"
+  x_lab = "Transformability", y_lab = "Pangenome size (total genes)"
 )
-transformability_pangenome$plot
+res_transf_violin
 ```
-*Each point is one taxon's `pan_genes` value (no reported per-taxon
-uncertainty interval); the violin shows the full distribution within each
-group and the annotated Wilcoxon rank-sum test quantifies the uncertainty
-in the group-level comparison, so no additional per-point error bars are
-drawn here, consistent with `plot_violin_kw()` in the source repository.*
 
-```{r transformability-vs-lambda-joint, fig.width = 8, fig.height = 6}
-# Do transformable and non-transformable taxa fall on the same lambda_hat
-# relationship, or are they offset once prophage density is accounted for?
-joint_model <- lm(pan_genes ~ lambda_hat + Transformability, data = main_df)
-broom::tidy(joint_model) %>%
-  kableExtra::kbl(digits = 3, caption = "Joint model: pan_genes ~ lambda_hat + Transformability") %>%
-  kableExtra::kable_styling(bootstrap_options = "striped", full_width = FALSE)
+**Supplementary Figure S2.** Naturally transformable taxa (blue) have smaller
+pangenomes than non-transformable taxa (purple).
 
-ggplot(main_df, aes(x = lambda_hat, y = pan_genes)) +
-  # Single overall trend line (group = 1 prevents this from being split by
-  # the colour/shape mapped on the point/error-bar layers below)
-  geom_smooth(aes(group = 1), method = "lm", se = FALSE,
-             colour = "black", linewidth = 0.8) +
-  geom_errorbarh(aes(xmin = lambda_lwr, xmax = lambda_upr, colour = Transformability),
-                height = 0, alpha = 0.5, show.legend = FALSE) +
-  geom_point(aes(colour = Transformability, shape = Niche), size = 2.5) +
-  ggrepel::geom_label_repel(aes(label = display, colour = Transformability),
-                            parse = TRUE, size = 3,
-                            show.legend = FALSE, max.overlaps = 20) +
-  scale_shape_manual(values = niche_palette) +
-  scale_colour_manual(values = transformability_palette) +
-  labs(x = "Expected number of prophage per isolate (lambda_hat)",
-      y = "Pangenome size (pan_genes)") +
-  guides(
-    colour = guide_legend(title.position = "top", nrow = 1),
-    shape  = guide_legend(title.position = "top")
-  ) +
-  theme_conflict()
+```{r transformability-joint-model}
+joint_model <- lm(pan_genes ~ lambda_hat + Transformability, data = full_df)
+joint_tidy  <- broom::tidy(joint_model)
+transf_p    <- joint_tidy$p.value[joint_tidy$term == "TransformabilityTransformable"]
+lambda_p    <- joint_tidy$p.value[joint_tidy$term == "lambda_hat"]
 ```
-*Horizontal error bars show the 95% CI on `lambda_hat` (Poisson MLE).
-`pan_genes` has no reported uncertainty interval in the source data, so no
-vertical error bars are shown.*
 
-Once `lambda_hat` is included in the model, `Transformability` adds no
-additional explanatory power (see coefficient table above): transformable
-and non-transformable taxa fall along the *same* `lambda_hat` regression
-line rather than forming offset clusters, indicating that the smaller
-pangenomes of transformable taxa are explained by their lower prophage
-burden rather than by transformability / HR directly.
+In a joint linear model of pangenome size against both prophage density and
+transformability, prophage density remains a strong, significant predictor
+(*p* = `r format(lambda_p, digits = 2, scientific = TRUE)`) while transformability
+adds no further explanatory power once prophage density is included
+(*p* = `r round(transf_p, 2)`). Transformable taxa therefore have smaller
+pangenomes chiefly because - consistent with the chromosomal-curing hypothesis -
+they also carry fewer prophage, rather than through any additional, independent
+effect of HR-mediated DNA uptake on pangenome size.
 
-# Combined summary figure
+## 2. The proportion of fast genes and the Y-intercept of the core/accessory distance curve
 
-```{r combined-figure, fig.width = 11, fig.height = 11}
-combine_with_legend(
-  list(
-    pan_vs_lambda$plot   + ggtitle("A"),
-    propfast_vs_hr$plot  + ggtitle("B"),
-    yint_vs_lambda$plot  + ggtitle("C"),
-    transformability_pangenome$plot + ggtitle("D")
-  ),
-  labels = NULL, nrow = 2, ncol = 2, legend_source = 1
+Horsfield et al.'s model partitions the accessory genome into a small,
+rapidly-exchanged ("fast") compartment and a larger, slowly-exchanged compartment;
+they note that this partitioning mirrors known differences in molecular turnover
+rate between mobile genetic elements and other accessory genes (citing
+N'Guessan et al. 2021). If prophage density were the dominant driver of this
+compartment structure, the proportion of fast genes should track `lambda_hat`
+directly.
+
+```{r propfast-vs-lambda, fig.width = 7, fig.height = 5.5}
+res_propfast_lambda <- plot_correlation(
+  full_df,
+  x_var = "lambda_hat", y_var = "prop_genes2_median",
+  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
+  y_lab = "Proportion of fast genes"
 )
+res_propfast_lambda$plot
+fit_propfast_lambda <- res_propfast_lambda$fit
 ```
 
-# Summary of correlation statistics
+**Supplementary Figure S3.** The proportion of fast genes is not significantly
+associated with prophage density (*r* = `r round(fit_propfast_lambda$r, 2)`,
+*p* = `r round(fit_propfast_lambda$p_value, 2)`).
+
+A similar null result is seen for the raw Y-intercept of the negative-exponential
+core-vs-accessory distance curve (Horsfield et al.'s instantaneous gene turnover
+rate; Supplementary File 8), which is also not significantly related to prophage
+density on its own:
+
+```{r yintercept-raw-vs-lambda, fig.width = 7, fig.height = 5.5}
+res_yint_raw <- plot_correlation(
+  negexp_df,
+  x_var = "lambda_hat", y_var = "Y-intercept (j)_Estimate",
+  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
+  y_lab = "Y-intercept of core/accessory distance curve"
+)
+res_yint_raw$plot
+fit_yint_raw <- res_yint_raw$fit
+```
+
+**Supplementary Figure S4.** Raw Y-intercept vs prophage density
+(*r* = `r round(fit_yint_raw$r, 2)`, *p* = `r round(fit_yint_raw$p_value, 2)`,
+*n* = `r fit_yint_raw$n`).
+
+However, the Y-intercept is a per-site rate; multiplying it by genome size converts
+it into an expected number of rapidly-diverging sites genome-wide, which **does**
+track prophage density closely:
+
+```{r yintercept-scaled-vs-lambda, fig.width = 7, fig.height = 5.5}
+res_yint_scaled <- plot_correlation(
+  negexp_df,
+  x_var = "lambda_hat", y_var = "yint_times_genome",
+  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
+  y_lab = "Y-intercept \u00d7 genome size"
+)
+res_yint_scaled$plot
+fit_yint_scaled <- res_yint_scaled$fit
+```
+
+**Figure 2A (main composite figure, below).** Genome-size-scaled Y-intercept vs
+prophage density (*r* = `r round(fit_yint_scaled$r, 2)`, *p* =
+`r round(fit_yint_scaled$p_value, 3)`, *n* = `r fit_yint_scaled$n`).
+
+## 3. Fast gene proportion tracks recombination probability, not prophage density
+
+Rather than prophage density, the proportion of fast genes is far better explained
+by the probability of diversification through homologous recombination:
+
+```{r propfast-vs-hr, fig.width = 7, fig.height = 5.5}
+res_propfast_hr <- plot_correlation(
+  full_df,
+  x_var = "Recombination probability", y_var = "prop_genes2_median",
+  x_lab = "Probability of diversification through homologous recombination",
+  y_lab = "Proportion of fast genes"
+)
+res_propfast_hr$plot
+fit_propfast_hr <- res_propfast_hr$fit
+```
+
+**Figure 2B (main composite figure, below).** Proportion of fast genes vs HR
+probability (*r* = `r round(fit_propfast_hr$r, 2)`, *p* =
+`r format(fit_propfast_hr$p_value, digits = 2, scientific = TRUE)`, *n* =
+`r fit_propfast_hr$n`).
+
+Taxa with a higher probability of HR-mediated diversification have a
+*smaller* proportion of fast genes - the opposite of what would be predicted if HR
+and prophage-driven pangenome expansion were simply two aspects of the same
+process. This is consistent with Horsfield et al.'s own observation that the fast
+compartment is enriched for genes with mobile-genetic-element-like turnover
+dynamics: where HR is frequent, chromosomal curing limits the accumulation of such
+autonomously-mobile elements, shrinking the fast compartment even as `lambda_hat`
+alone fails to capture this relationship directly.
+
+## 4. Basal gene turnover tracks recombination probability, not prophage density
+
+The same contrast holds for the basal (slow-compartment) gene turnover rate, which
+is at best marginally related to prophage density on its own:
+
+```{r baseturnover-vs-lambda, fig.width = 7, fig.height = 5.5}
+res_baseturnover_lambda <- plot_correlation(
+  full_df,
+  x_var = "lambda_hat", y_var = "rate_genes1_median",
+  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
+  y_lab = "Basal gene turnover rate",
+  ylim  = c(0, 0.0025)
+)
+res_baseturnover_lambda$plot
+fit_baseturnover_lambda <- res_baseturnover_lambda$fit
+```
+
+**Supplementary Figure S5.** Basal gene turnover rate vs prophage density
+(*r* = `r round(fit_baseturnover_lambda$r, 2)`, *p* =
+`r round(fit_baseturnover_lambda$p_value, 2)`). The vertical axis is truncated to
+emphasise the bulk of taxa; *H. influenzae* and *Neisseria* spp. have markedly
+wider credible intervals that extend off the top of this view (the regression line
+and statistics shown are fitted to the full, untruncated data).
+
+```{r baseturnover-vs-hr, fig.width = 7, fig.height = 5.5}
+res_baseturnover_hr <- plot_correlation(
+  full_df,
+  x_var = "Recombination probability", y_var = "rate_genes1_median",
+  x_lab = "Probability of diversification through homologous recombination",
+  y_lab = "Basal gene turnover rate"
+)
+res_baseturnover_hr$plot
+fit_baseturnover_hr <- res_baseturnover_hr$fit
+```
+
+**Figure 2C (main composite figure, below).** Basal gene turnover rate vs HR
+probability (*r* = `r round(fit_baseturnover_hr$r, 2)`, *p* =
+`r format(fit_baseturnover_hr$p_value, digits = 2, scientific = TRUE)`, *n* =
+`r fit_baseturnover_hr$n`).
+
+Basal turnover of the slowly-exchanged gene compartment rises significantly with
+HR probability. Since these are, by construction, genes that lack the
+autonomous mobility of the fast compartment, this points to **transformation being
+an important mechanism facilitating the exchange of accessory loci that are not
+themselves autonomously mobile** - i.e. HR provides a route to exchange for genes
+that would otherwise depend entirely on vertical inheritance.
+
+## Combined summary figure
+
+```{r combined-figure, fig.width = 11, fig.height = 4.2}
+figure2 <- cowplot::plot_grid(
+  res_yint_scaled$plot      + theme(legend.position = "none"),
+  res_propfast_hr$plot      + theme(legend.position = "none"),
+  res_baseturnover_hr$plot  + theme(legend.position = "none"),
+  nrow = 1, labels = "AUTO"
+)
+
+shared_legend <- cowplot::get_plot_component(
+  res_propfast_hr$plot + theme(legend.position = "bottom", legend.box = "horizontal"),
+  "guide-box-bottom", return_all = TRUE
+)
+
+cowplot::plot_grid(figure2, shared_legend, nrow = 2, rel_heights = c(0.88, 0.12))
+```
+
+**Figure 2.** (A) Genome-size-scaled Y-intercept vs prophage density. (B) Proportion
+of fast genes vs HR probability. (C) Basal gene turnover rate vs HR probability.
+Together, panels B and C show that the two components of Horsfield et al.'s
+accessory-genome model are each better predicted by HR probability than by prophage
+density, while panel A shows that genome-size-scaled instantaneous turnover does
+track prophage density - see Discussion for how these results are reconciled.
+
+## Summary of correlation statistics
 
 ```{r summary-table}
-tribble(
-  ~Relationship, ~r, ~R2, ~p,
-  "pan_genes ~ lambda_hat",                 pan_vs_lambda$r,        pan_vs_lambda$r2,        pan_vs_lambda$p_value,
-  "rare_genes ~ lambda_hat",                rare_vs_lambda$r,       rare_vs_lambda$r2,       rare_vs_lambda$p_value,
-  "pan_genes ~ Recombination probability",  pan_vs_hr$r,            pan_vs_hr$r2,            pan_vs_hr$p_value,
-  "prop_genes2_median ~ Recombination probability", propfast_vs_hr$r, propfast_vs_hr$r2,     propfast_vs_hr$p_value,
-  "rate_genes1_median ~ Recombination probability", baseturnover_vs_hr$r, baseturnover_vs_hr$r2, baseturnover_vs_hr$p_value,
-  "core_mu_median ~ Recombination probability",     coremu_vs_hr$r, coremu_vs_hr$r2,         coremu_vs_hr$p_value,
-  "(Y-intercept x genome size) ~ lambda_hat",       yint_vs_lambda$r, yint_vs_lambda$r2,     yint_vs_lambda$p_value
+tibble::tribble(
+  ~Comparison,                                             ~r,                           ~R2,                              ~p,                                ~n,                       ~`Figure`,
+  "Pangenome size vs prophage density",                    fit_pangenome$r,              fit_pangenome$r2,                 fit_pangenome$p_value,             fit_pangenome$n,          "Figure 1 (main)",
+  "Rare genes vs prophage density",                        fit_raregenes$r,              fit_raregenes$r2,                 fit_raregenes$p_value,             fit_raregenes$n,          "Fig. S1",
+  "Fast-gene proportion vs prophage density",              fit_propfast_lambda$r,        fit_propfast_lambda$r2,           fit_propfast_lambda$p_value,       fit_propfast_lambda$n,    "Fig. S3",
+  "Raw Y-intercept vs prophage density",                   fit_yint_raw$r,               fit_yint_raw$r2,                  fit_yint_raw$p_value,              fit_yint_raw$n,           "Fig. S4",
+  "Y-intercept \u00d7 genome size vs prophage density",    fit_yint_scaled$r,            fit_yint_scaled$r2,               fit_yint_scaled$p_value,           fit_yint_scaled$n,        "Figure 2A (main)",
+  "Fast-gene proportion vs HR probability",                fit_propfast_hr$r,            fit_propfast_hr$r2,               fit_propfast_hr$p_value,           fit_propfast_hr$n,        "Figure 2B (main)",
+  "Basal turnover vs prophage density",                    fit_baseturnover_lambda$r,    fit_baseturnover_lambda$r2,       fit_baseturnover_lambda$p_value,   fit_baseturnover_lambda$n,"Fig. S5",
+  "Basal turnover vs HR probability",                      fit_baseturnover_hr$r,        fit_baseturnover_hr$r2,           fit_baseturnover_hr$p_value,       fit_baseturnover_hr$n,    "Figure 2C (main)"
 ) %>%
-  dplyr::mutate(across(c(r, R2, p), ~ signif(.x, 3))) %>%
-  knitr::kable() %>%
-  kableExtra::kable_styling(bootstrap_options = "striped", full_width = FALSE)
+  dplyr::mutate(
+    r  = round(r, 3),
+    R2 = round(R2, 3),
+    p  = signif(p, 3)
+  ) %>%
+  kable(caption = "Summary of all correlation statistics reported in this document (each from a single, ungrouped linear model).") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE)
 ```
 
-# Session information
+## Discussion
+
+### 1. Pangenome size and prophage density
+
+Pangenome size, and the number of rare accessory genes specifically, are both
+strongly positively associated with prophage density across these 23 taxa (Figure
+1, Supplementary Figure S1), consistent with reduced HR allowing prophage - and the
+rest of the low-frequency accessory gene pool they are embedded within - to
+accumulate. Naturally transformable taxa also have significantly smaller
+pangenomes on average (Supplementary Figure S2), but a joint model shows this
+effect is fully accounted for by their lower prophage burden: transformability adds
+no independent explanatory power once prophage density is included. This mirrors
+Kwun & Croucher's own interpretation that the benefit of transformation for
+chromosomal curing operates *through* its effect on prophage content, not as a
+separate, direct constraint on genome size.
+
+### 2 & 3. The accessory-genome compartment structure: fast genes track HR, not prophage
+
+Horsfield et al. partition the accessory genome into a small, fast-exchanging
+compartment and a larger, slow-exchanging one, and note that this structure mirrors
+known molecular-rate differences between mobile genetic elements and other
+accessory genes (citing N'Guessan et al. 2021) - i.e. there was already reason,
+within Horsfield et al.'s own framework, to expect the fast compartment to be
+enriched for autonomously-mobile elements such as prophage. Yet neither the
+proportion of fast genes nor the (raw) instantaneous turnover rate they estimate
+from the negative-exponential curve fit is significantly related to prophage
+density directly (Supplementary Figures S3 and S4). Instead, both are far better
+explained by HR probability: the proportion of fast genes declines significantly as
+HR probability rises (Figure 2B), the inverse of the direction expected if HR and
+prophage accumulation were simply two readouts of the same underlying process.
+
+Reconciling this with the pangenome-size result in Section 1 requires distinguishing
+between genome-wide pangenome *size* (which does track prophage density directly)
+and the *proportion* of the accessory genome partitioned into the fast-exchanging
+compartment (which does not). Genome-size-scaling resolves this: multiplying the
+Y-intercept by genome size converts a per-site instantaneous turnover rate into an
+expected number of rapidly-diverging sites genome-wide, and this scaled quantity
+**does** track prophage density closely (Figure 2A). Taken together, these results
+suggest prophage inflate the total number of rapidly-diverging genes in a genome in
+absolute terms, without necessarily inflating the *proportion* of the accessory
+genome behaving this way - a distinction obscured when only Horsfield et al.'s
+proportional metrics are considered in isolation, and only resolved once the HR/
+prophage framework is brought in as a second explanatory axis.
+
+### 4. Basal gene turnover and HR: transformation as a route to exchange for non-mobile loci
+
+Basal turnover of the slowly-exchanged gene compartment shows at best a marginal,
+non-robust association with prophage density (Supplementary Figure S5) but rises
+significantly with HR
+probability (Figure 2C). Because the slow compartment is defined, by construction,
+as lacking the autonomous mobility of the fast compartment, this indicates that
+**transformation is an important mechanism facilitating the exchange of accessory
+loci that are not themselves autonomously mobile**: in taxa where HR is frequent,
+genes without their own transfer machinery can nonetheless be exchanged between
+genomes via DNA uptake and recombination, raising their apparent turnover rate even
+though they are not mobile genetic elements in the conventional sense.
+
+### Overall interpretation
+
+Across all four comparisons, a consistent pattern emerges: wherever Horsfield et
+al.'s metrics are genuinely proportional or rate-based descriptions of the
+accessory-genome compartment structure (proportion of fast genes, basal turnover
+rate), they are better explained by HR probability than by prophage density, and in
+the direction consistent with HR constraining rather than reflecting mobile
+element accumulation. Wherever a metric instead captures absolute, genome-wide
+quantities (pangenome size, rare gene count, genome-size-scaled turnover), prophage
+density is the stronger correlate. This supports the hypothesis that the HR/
+prophage conflict identified by Kwun & Croucher is one of the mechanisms underlying
+the pangenome-scale variation reported by Horsfield et al., while also clarifying
+that it acts on genome-wide accessory gene content and on the exchange of
+non-autonomously-mobile loci, rather than uniformly reshaping the relative size of
+the fast-exchanging compartment itself.
+
+### Limitations
+
+- The prophage estimates used throughout are restricted to geNomad-detected,
+  hallmark-gene-rich *Caudoviricetes* provirus regions, deliberately excluding
+  satellite phage/phage-related chromosomal islands, *Inoviridae*, and plasmids;
+  the true burden of all mobile genetic elements combined is therefore larger than
+  `lambda_hat` captures, and could relate differently to Horsfield et al.'s metrics.
+- Sample sizes are modest (n = 23, or n = 15 for analyses requiring a Supplementary
+  File 8 curve fit), and several relationships are sensitive to individual
+  high-leverage taxa (e.g. *H. pylori*, *H. influenzae*).
+- All comparisons are correlational and cross-sectional across taxa; they cannot
+  establish the direction of causality between HR, prophage accumulation, and
+  pangenome structure.
+
+## Session information
 
 ```{r session-info}
 sessionInfo()
