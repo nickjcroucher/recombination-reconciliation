@@ -90,6 +90,9 @@ safe_num <- function(x, digits = 2) {
   format(signif(x, digits), trim = TRUE)
 }
 
+# General-purpose single-value label builder, kept for ad hoc use; prefer
+# plotmath_stat_relations() (below) whenever a label combines more than one
+# "name == value" statistic, to avoid chaining relational operators.
 safe_plotmath_label <- function(template, ..., digits = 2) {
   vals  <- lapply(list(...), safe_num, digits = digits)
   label <- do.call(sprintf, c(list(template), vals))
@@ -100,6 +103,43 @@ safe_plotmath_label <- function(template, ..., digits = 2) {
     plain <- gsub("italic\\(([A-Za-z0-9]+)\\)", "\\1", label)
     plain <- gsub("[*^]", "", plain)
     plain <- gsub("==", "=", plain)
+    plain <- gsub("['()]", "", plain)
+    return(list(label = plain, parse = FALSE))
+  }
+  list(label = label, parse = TRUE)
+}
+
+#' Build a plotmath label concatenating several "name == value" relations.
+#'
+#' NOTE on a previously-shipped bug: R's relational operators (==, !=, <, >,
+#' <=, >=) are *non-associative* in the language grammar, so a single
+#' expression chaining more than one of them without explicit parentheses
+#' (e.g. "italic(r) == 0.85 * '; ' * italic(R)^2 == 0.72") is a syntax error
+#' and parse() always fails for it -- silently falling back to the plain,
+#' unparsed text for *every* figure (this previously affected every
+#' correlation plot in the report). Each "name == value" relation must be
+#' individually wrapped in parentheses before being concatenated with `*`,
+#' which is itself a perfectly ordinary (associative) operator and chains
+#' without issue; this is the standard, documented idiom for combining
+#' multiple statistics in a single plotmath annotation (see ?plotmath).
+plotmath_stat_relations <- function(names, values, digits = 2, sep = "'; '") {
+  # `sep` is a plotmath *string literal* (quoted), not a bare operator, so
+  # that joining with the ordinary (associative) `*` operator never
+  # introduces a second, unparenthesized use of a non-associative operator
+  # such as `~` or `==` alongside it.
+  parts <- mapply(function(nm, val) {
+    sprintf("(%s == %s)", nm, safe_num(val, digits = digits))
+  }, names, values, SIMPLIFY = TRUE)
+
+  label <- paste(parts, collapse = paste0(" * ", sep, " * "))
+
+  ok <- tryCatch({ parse(text = label); TRUE }, error = function(e) FALSE)
+  if (!ok) {
+    plain <- gsub("italic\\(([A-Za-z0-9]+)\\)", "\\1", label)
+    plain <- gsub("[*^()]", "", plain)
+    plain <- gsub("==", "=", plain)
+    plain <- gsub("'", "", plain)
+    plain <- gsub("~", " ", plain)
     return(list(label = plain, parse = FALSE))
   }
   list(label = label, parse = TRUE)
@@ -157,9 +197,9 @@ plot_correlation <- function(df,
   p_val  <- fit_summary$p.value
   r_val  <- sign(stats::coef(fit)[["x_fit"]]) * sqrt(r2)
 
-  stat_label <- safe_plotmath_label(
-    "italic(r) == %s * '; ' * italic(R)^2 == %s * '; ' * italic(p) == %s",
-    r_val, r2, p_val
+  stat_label <- plotmath_stat_relations(
+    names  = c("italic(r)", "italic(R)^2", "italic(p)"),
+    values = c(r_val, r2, p_val)
   )
 
   # Headroom above the data so the stats annotation never collides with
@@ -204,7 +244,7 @@ plot_correlation <- function(df,
       size = 2.5
     ) +
     ggrepel::geom_label_repel(
-      ggplot2::aes(label = .data[[label_var]]),
+      ggplot2::aes(label = .data[[label_var]], colour = .data[[colour_var]]),
       size = 3, force_pull = 0.5, parse = TRUE,
       show.legend = FALSE, max.overlaps = 30
     ) +
@@ -264,8 +304,10 @@ plot_violin_comparison <- function(df, x_var, y_var,
   y_vec <- plot_df[[y_var]]
 
   test_res  <- stats::wilcox.test(y_vec ~ x_vec)
-  p_label   <- safe_plotmath_label(
-    "Wilcoxon~rank~sum~test~italic(p) == %s", test_res$p.value, digits = 3
+  p_label   <- plotmath_stat_relations(
+    names  = "'Wilcoxon rank sum test' ~ italic(p)",
+    values = test_res$p.value,
+    digits = 3
   )
 
   p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = .data[[x_var]], y = .data[[y_var]])) +

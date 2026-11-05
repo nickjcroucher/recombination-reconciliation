@@ -257,7 +257,8 @@ ggplot(main_df, aes(x = lambda_hat, y = pan_genes)) +
   geom_errorbarh(aes(xmin = lambda_lwr, xmax = lambda_upr, colour = Transformability),
                 height = 0, alpha = 0.5, show.legend = FALSE) +
   geom_point(aes(colour = Transformability, shape = Niche), size = 2.5) +
-  ggrepel::geom_label_repel(aes(label = display), parse = TRUE, size = 3,
+  ggrepel::geom_label_repel(aes(label = display, colour = Transformability),
+                            parse = TRUE, size = 3,
                             show.legend = FALSE, max.overlaps = 20) +
   scale_shape_manual(values = niche_palette) +
   scale_colour_manual(values = transformability_palette) +
