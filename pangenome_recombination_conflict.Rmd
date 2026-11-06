@@ -212,7 +212,7 @@ density on its own:
 ```{r yintercept-raw-vs-lambda, fig.width = 7, fig.height = 5.5}
 res_yint_raw <- plot_correlation(
   negexp_df,
-  x_var = "lambda_hat", y_var = "Y-intercept (j)_Estimate",
+  x_var = "lambda_hat", y_var = "Proportion fast genes_Median",
   x_lab = "Expected number of intact Caudoviricetes prophage per genome",
   y_lab = "Y-intercept of core/accessory distance curve"
 )

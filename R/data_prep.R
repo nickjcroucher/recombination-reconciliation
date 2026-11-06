@@ -90,7 +90,7 @@ match_horsfield_to_taxa <- function(taxon_vec, file1_df) {
 negexp_species_map <- list(
   "Acinetobacter baumannii"   = c("A. baumanii"),
   "Bacillus subtilis"         = c(),  # no File 8 entry
-  "Campylobacter spp"         = c("C. jejuni"),
+  "Campylobacter spp"         = c("C. jejuni", "Campylobacter jejuni"),
   "Citrobacter spp"           = c(),
   "Enterobacter spp"          = c(),
   "Enterococcus faecalis"     = c("E. faecalis"),
@@ -99,16 +99,16 @@ negexp_species_map <- list(
   "Haemophilus influenzae"    = c("H. influenzae"),
   "Helicobacter pylori"       = c("H. pylori"),
   "Klebsiella pneumoniae"     = c("K. pneumoniae"),
-  "Moraxella catarrhalis"     = c("M. catarrhalis"),
+  "Moraxella catarrhalis"     = c("M. catarrhalis", "Morexalla catarrhalis"),
   "Morganella morganii"       = c(),
-  "Neisseria spp"             = c("N. gonorrhoeae", "N. meningitidis"),
+  "Neisseria spp"             = c("N. gonorrhoeae", "N. meningitidis", "Neisseria gonorrhoeae", "Neisseria meningitidis"),
   "Proteus spp"               = c(),
   "Pseudomonas aeruginosa"    = c("P. aeruginosa"),
   "Salmonella enterica"       = c("S. enterica"),
   "Serratia spp"              = c(),
   "Staphylococcus aureus"     = c("S. aureus"),
   "Streptococcus agalactiae"  = c("S. agalactiae"),
-  "Streptococcus pneumoniae"  = c("S. pneumoniae (Global)", "S. pneumoniae (Local)"),
+  "Streptococcus pneumoniae"  = c("S. pneumoniae (Global)"),
   "Streptococcus pyogenes"    = c("S. pyogenes"),
   "Vibrio cholerae"           = c()
 )
@@ -116,11 +116,12 @@ negexp_species_map <- list(
 match_negexp_to_taxa <- function(taxon_vec, file8_df) {
 
   file8_wide <- file8_df %>%
-    dplyr::select(Species, Coefficient, Estimate, `Upper 95% CI`, `Lower CI`) %>%
+    dplyr::filter(Species_short != "S. pneumoniae (Local)") %>% 
+    dplyr::select(Species, Parameter_name, Median, Upper_CI, Lower_CI) %>%
     tidyr::pivot_wider(
-      names_from  = Coefficient,
-      values_from = c(Estimate, `Upper 95% CI`, `Lower CI`),
-      names_glue  = "{Coefficient}_{.value}"
+      names_from  = Parameter_name,
+      values_from = c(Median, Upper_CI, Lower_CI),
+      names_glue  = "{Parameter_name}_{.value}"
     )
 
   numeric_cols <- names(file8_wide)[vapply(file8_wide, is.numeric, logical(1))]
@@ -132,7 +133,7 @@ match_negexp_to_taxa <- function(taxon_vec, file8_df) {
       return(NULL)
     }
 
-    matched_rows <- file8_wide %>% dplyr::filter(Species %in% member_species)
+    matched_rows <- file8_wide %>% dplyr::filter(Species %in% member_species | Species %in% c(taxon))
     if (nrow(matched_rows) == 0) return(NULL)
 
     summarised <- matched_rows %>%
@@ -154,12 +155,39 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
 
   rec_df   <- readr::read_csv(file.path(raw_dir, "recombination_conflict_comparison_plot.csv"),
                               show_col_types = FALSE)
-  file1_df <- readr::read_csv(file.path(raw_dir, "supplementary_file1_408species.csv"),
-                              show_col_types = FALSE)
   file8_df <- readr::read_csv(file.path(raw_dir, "supplementary_file8_negexp_fits.csv"),
-                              show_col_types = FALSE)
+                              show_col_types = FALSE) %>% 
+    dplyr::mutate(Species =
+                    dplyr::if_else(
+                      Species=="Morexalla catarrhalis",
+                      "Moraxella catarrhalis",
+                      Species)
+    )
+  file1_df <- readr::read_csv(file.path(raw_dir, "supplementary_file1_408species.csv"),
+                              show_col_types = FALSE) %>% 
+                dplyr::mutate(Species =
+                                dplyr::if_else(
+                                  Species=="Morexalla catarrhalis",
+                                  "Moraxella catarrhalis",
+                                  Species)
+                              )
 
-  horsfield_matched <- match_horsfield_to_taxa(rec_df$species, file1_df)
+  horsfield_matched <-
+    match_horsfield_to_taxa(rec_df$species, file1_df) %>% 
+    dplyr::left_join(
+      match_horsfield_to_taxa(rec_df$species,
+                              file8_df %>%
+                                tidyr::separate_wider_delim(Species,
+                                                            names=c("Genus","specific_name"),
+                                                            delim=" ",
+                                                            cols_remove = FALSE,
+                                                            too_many = "drop") %>% 
+                                dplyr::mutate(Mean_genome_size = file8_df$Pangenome_size*file8_df$Avg_genome_size) %>%
+                                dplyr::select(Species,Genus,Mean_genome_size) %>% 
+                                dplyr::distinct()
+                              ) %>% dplyr::select(-n_matched),
+      by = "species"
+    )
 
   full_df <- rec_df %>%
     dplyr::left_join(horsfield_matched, by = "species")
@@ -167,11 +195,11 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
   negexp_matched <- match_negexp_to_taxa(rec_df$species, file8_df)
 
   negexp_df <- full_df %>%
-    dplyr::inner_join(negexp_matched, by = "species") %>%
+    dplyr::inner_join(negexp_matched, by = "species") %>% 
     dplyr::mutate(
-      yint_times_genome       = `Y-intercept (j)_Estimate`       * genome_size,
-      yint_times_genome_lwr   = `Y-intercept (j)_Lower CI`       * genome_size,
-      yint_times_genome_upr   = `Y-intercept (j)_Upper 95% CI`   * genome_size
+      yint_times_genome       = `Proportion fast genes_Median`       * Mean_genome_size,
+      yint_times_genome_lwr   = `Proportion fast genes_Lower_CI`       * Mean_genome_size,
+      yint_times_genome_upr   = `Proportion fast genes_Upper_CI`   * Mean_genome_size
     )
 
   list(full_df = full_df, negexp_df = negexp_df)
