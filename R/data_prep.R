@@ -45,41 +45,68 @@ species_rename <- list(
 #' Supplementary File 1, averaging across member species for genus-level
 #' ("spp") taxa, and renaming where GTDB taxonomy differs from the binomial
 #' used by Kwun & Croucher.
-match_horsfield_to_taxa <- function(taxon_vec, file1_df) {
-
+match_horsfield_to_taxa <- function(taxon_vec, file1_df,
+                                    return_matched_species = FALSE) {
+  
   numeric_cols <- names(file1_df)[vapply(file1_df, is.numeric, logical(1))]
-
+  
   purrr::map_dfr(unique(taxon_vec), function(taxon) {
-
+    
     is_genus_level <- taxon %in% genus_level_taxa
-
+    
     if (is_genus_level) {
       genus <- sub(" spp$", "", taxon)
-      matched_rows <- file1_df %>% dplyr::filter(Genus == genus)
+      matched_rows <- file1_df %>%
+        dplyr::filter(Genus == genus)
     } else {
-      # Scalar lookup: must use a plain if/else here, NOT a vectorised
-      # dplyr::if_else(), since the RHS species_rename[[taxon]] throws
-      # "subscript out of bounds" for any taxon not present in the lookup
-      # list, and if_else() evaluates both branches for every element.
       if (taxon %in% names(species_rename)) {
         lookup_species <- unname(species_rename[[taxon]])
       } else {
         lookup_species <- taxon
       }
-      matched_rows <- file1_df %>% dplyr::filter(Species == lookup_species)
+      
+      matched_rows <- file1_df %>%
+        dplyr::filter(Species == lookup_species)
     }
-
+    
     if (nrow(matched_rows) == 0) {
-      return(tibble::tibble(species = taxon, n_matched = 0L))
+      result <- tibble::tibble(
+        species = taxon,
+        n_matched = 0L
+      )
+      
+      if (return_matched_species) {
+        result$matched_species <- NA_character_
+      }
+      
+      return(result)
     }
-
+    
     summarised <- matched_rows %>%
-      dplyr::summarise(dplyr::across(dplyr::all_of(numeric_cols), ~ mean(.x, na.rm = TRUE)))
-
-    dplyr::bind_cols(
-      tibble::tibble(species = taxon, n_matched = nrow(matched_rows)),
+      dplyr::summarise(
+        dplyr::across(
+          dplyr::all_of(numeric_cols),
+          ~ mean(.x, na.rm = TRUE)
+        )
+      )
+    
+    result <- dplyr::bind_cols(
+      tibble::tibble(
+        species = taxon,
+        n_matched = nrow(matched_rows)
+      ),
       summarised
     )
+    
+    if (return_matched_species) {
+      result <- tibble::add_column(
+        result,
+        matched_species = paste(unique(matched_rows$Species), collapse = "; "),
+        .after = "species"
+      )
+    }
+    
+    result
   })
 }
 
@@ -202,5 +229,5 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
       yint_times_genome_upr   = `Proportion fast genes_Upper_CI`   * Mean_genome_size
     )
 
-  list(full_df = full_df, negexp_df = negexp_df)
+  list(raw_atb = file1_df, full_df = full_df, negexp_df = negexp_df)
 }

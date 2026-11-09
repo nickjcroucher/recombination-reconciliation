@@ -21,9 +21,11 @@ library(broom)
 library(knitr)
 library(kableExtra)
 library(scales)
+library(ggExtra)
 
 source("R/data_prep.R")
 source("R/helpers.R")
+
 ```
 
 ## Background
@@ -71,6 +73,7 @@ are not independently modelled here.
 
 ```{r load-data}
 datasets  <- build_analysis_datasets(raw_dir = "data/raw")
+atb_df    <- datasets$raw_atb     # large-scale analysis by Horsfield et al
 full_df   <- datasets$full_df     # all 23 taxa, merged with Supplementary File 1
 negexp_df <- datasets$negexp_df   # 15 taxa with a Supplementary File 8 curve fit
 ```
@@ -319,7 +322,7 @@ an important mechanism facilitating the exchange of accessory loci that are not
 themselves autonomously mobile** - i.e. HR provides a route to exchange for genes
 that would otherwise depend entirely on vertical inheritance.
 
-## Combined summary figure
+## 5. Combined summary figure
 
 ```{r combined-figure, fig.width = 11, fig.height = 11}
 figure1 <- cowplot::plot_grid(
@@ -348,7 +351,7 @@ accessory-genome model are each better predicted by HR probability than by proph
 density, while panel A shows that genome-size-scaled instantaneous turnover does
 track prophage density - see Discussion for how these results are reconciled.
 
-## Summary of correlation statistics
+## 6. Summary of correlation statistics
 
 ```{r summary-table}
 tibble::tribble(
@@ -369,6 +372,122 @@ tibble::tribble(
   ) %>%
   kable(caption = "Summary of all correlation statistics reported in this document (each from a single, ungrouped linear model).") %>%
   kable_styling(bootstrap_options = c("striped", "condensed"), full_width = FALSE)
+```
+
+## 7. Pairwise distance analysis
+
+To test whether the observed trends might be an artefact of pansim model fits, the raw pairwise distance distributions to which the model was fitted were analysed. All the species for which pairwise distance subsamples were available (https://doi.org/10.5281/zenodo.17976203), and had been categorised according to transformability by Kwun & Croucher, were jointly analysed. The core distances were filtered to represent relationships between non-identical closely-related isolates (core distances >0% and <0.5% divergence). The points for each species were downsampled to ensure each contributed the same number of pairwise distances to the overall dataset.
+
+```{r Pairwise distance analysis, fig.width=8, fig.height=8}
+
+# Set thresholds
+core_min <- 0.0
+accessory_min <- 0.0
+core_threshold <- 0.005
+accessory_threshold <- 0.4
+
+# Directory containing the files
+dist_tar <- "Sample_PopPUNK_distance.tar.gz"
+dist_files <- utils::untar(dist_tar, list = TRUE)
+dist_files <- dist_files[grepl("\\.txt$", dist_files, ignore.case = TRUE)]
+data_dir <- "./Sample_PopPUNK_distance/"
+utils::untar(dist_tar, files = dist_files)
+
+# Read and combine all files
+set.seed(42)
+distances_df <-
+  dist_files %>%
+  purrr::set_names() %>%
+  purrr::map_dfr(
+    ~ read_table(
+      .x,
+      col_names = c("Core", "Accessory"),
+      show_col_types = FALSE
+    ),
+    .id = "file"
+  ) %>%
+  dplyr::filter(
+    Core < core_threshold & Core > core_min,
+    Accessory < accessory_threshold & Accessory > accessory_min
+  ) %>% 
+  dplyr::mutate(
+    species = basename(file) %>%
+      str_remove("_real\\.txt$") %>%
+      str_split("_") %>%
+      map_chr(~ paste(head(.x, 2), collapse = "_"))
+  ) %>%
+  dplyr::mutate(species = gsub("_"," ",species)) %>% 
+  dplyr::select(species, Core, Accessory) %>% 
+  dplyr::mutate(species = dplyr::if_else(species == "Morexalla catarrhalis",
+                                         "Moraxella catarrhalis",
+                                         species)
+                )
+
+# Find the number of points in the least-represented species
+min_n <- distances_df %>%
+  count(species) %>%
+  summarise(min_n = min(n)) %>%
+  pull(min_n)
+
+# Randomly downsample all species to the same number of points
+distances_df_downsampled <- distances_df %>%
+  group_by(species) %>%
+  slice_sample(n = min_n) %>%
+  ungroup()
+
+transformability_df <- match_horsfield_to_taxa(
+  taxon_vec = full_df$species,
+  file1_df = distances_df_downsampled %>%
+    dplyr::select(species) %>%
+    dplyr::distinct() %>%
+    dplyr::rename(Species = species) %>%
+    tidyr::separate_wider_delim(
+      Species,
+      names = c("Genus", "specific_name"),
+      delim = " ",
+      cols_remove = FALSE,
+      too_many = "drop"
+    ), return_matched_species = TRUE
+) %>%
+  dplyr::filter(n_matched > 0) %>%
+  tidyr::separate_longer_delim(matched_species, delim = "; ") %>%
+  dplyr::left_join(
+    full_df %>%
+      dplyr::select(species, Transformability),
+    by = "species"
+  ) %>%
+  dplyr::select(species, matched_species, Transformability)
+
+combined_df <- distances_df_downsampled %>%
+  dplyr::left_join(transformability_df %>% 
+                     dplyr::select(-species),
+                   by = c("species"="matched_species")) %>%
+  dplyr::filter(!is.na(Transformability))
+
+# Plot scatterplot 
+p <- 
+  ggplot(combined_df,
+         aes(x = Core,
+             y = Accessory,
+             colour = Transformability)
+         ) +
+  geom_point(alpha = 0.25) +
+  scale_colour_manual(values = transformability_palette,
+aesthetics = c("colour", "fill")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+
+ggMarginal(p, type="density", groupColour = TRUE, groupFill = TRUE)
+
+```
+
+
+```{r Per species, fig.height=11, fig.width=11}
+
+p +
+  facet_wrap(~species) +
+  theme(strip.backgroup = element_blank())
+
 ```
 
 ## Session information

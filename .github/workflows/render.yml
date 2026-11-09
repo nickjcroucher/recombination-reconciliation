@@ -58,6 +58,7 @@ jobs:
             any::cowplot
             any::scales
             any::broom
+            any::ggExtra
 
       - name: Knit main R Markdown document
         run: |
