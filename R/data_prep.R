@@ -46,7 +46,8 @@ species_rename <- list(
 #' ("spp") taxa, and renaming where GTDB taxonomy differs from the binomial
 #' used by Kwun & Croucher.
 match_horsfield_to_taxa <- function(taxon_vec, file1_df,
-                                    return_matched_species = FALSE) {
+                                    return_matched_species = FALSE,
+                                    return_sum = FALSE) {
   
   numeric_cols <- names(file1_df)[vapply(file1_df, is.numeric, logical(1))]
   
@@ -82,14 +83,25 @@ match_horsfield_to_taxa <- function(taxon_vec, file1_df,
       return(result)
     }
     
-    summarised <- matched_rows %>%
-      dplyr::summarise(
-        dplyr::across(
-          dplyr::all_of(numeric_cols),
-          ~ mean(.x, na.rm = TRUE)
+    summarised <- NULL
+    if (return_sum) {
+      summarised <- matched_rows %>%
+        dplyr::summarise(
+          dplyr::across(
+            dplyr::all_of(numeric_cols),
+            ~ sum(.x, na.rm = TRUE)
+          )
         )
-      )
-    
+    } else {
+      summarised <- matched_rows %>%
+        dplyr::summarise(
+          dplyr::across(
+            dplyr::all_of(numeric_cols),
+            ~ mean(.x, na.rm = TRUE)
+          )
+        )
+    }
+
     result <- dplyr::bind_cols(
       tibble::tibble(
         species = taxon,
@@ -170,6 +182,46 @@ match_negexp_to_taxa <- function(taxon_vec, file8_df) {
   })
 }
 
+get_sample_sizes <- function(df1,df2) {
+  
+  df1 %>% 
+    dplyr::rename(Kwun_n_isolates = any_of("n_isolates")) %>% 
+    dplyr::left_join(match_horsfield_to_taxa(rec_df$species,
+                                             df2 %>%
+                                               tidyr::separate_wider_delim(Species,
+                                                                           names=c("Genus","specific_name"),
+                                                                           delim=" ",
+                                                                           cols_remove = FALSE,
+                                                                           too_many = "drop") %>%
+                                               dplyr::select(Species,Genus,n_isolates) %>%
+                                               dplyr::distinct(),
+                                             return_sum = TRUE
+    ),
+    by = "species"
+    ) %>% 
+    dplyr::rename(Horsfield_n_isolates = any_of("n_isolates"))
+  
+}
+
+standardise_species <- function(x) {
+  
+  x <- stringr::str_replace(
+    x,
+    "^([A-Za-z]+)_([A-Z]) ",
+    function(m) {
+      parts <- stringr::str_match(
+        m, "^([A-Za-z]+)_([A-Z]) "
+      )
+      paste0(parts[, 2], " ", tolower(parts[, 3]), " ")
+    }
+  )
+  
+  x <- stringr::str_remove(x, "_[A-Z]+$")
+  x <- stringr::str_remove(x, " [a-z]$")
+  
+  x
+}
+
 #' Master function: builds both analysis datasets from the three raw files.
 #'
 #' Returns a list with:
@@ -178,12 +230,14 @@ match_negexp_to_taxa <- function(taxon_vec, file8_df) {
 #'   negexp_df - the subset (n=15) of full_df additionally merged with
 #'               Supplementary File 8 negative-exponential fit parameters,
 #'               plus a genome-size-scaled Y-intercept column
+#'   raw_atb  - the model fits to the 408 species dataset
 build_analysis_datasets <- function(raw_dir = "data/raw") {
-
+  
+  # Parse data files
   rec_df   <- readr::read_csv(file.path(raw_dir, "recombination_conflict_comparison_plot.csv"),
                               show_col_types = FALSE)
   file8_df <- readr::read_csv(file.path(raw_dir, "supplementary_file8_negexp_fits.csv"),
-                              show_col_types = FALSE) %>% 
+                              show_col_types = FALSE) %>%
     dplyr::mutate(Species =
                     dplyr::if_else(
                       Species=="Morexalla catarrhalis",
@@ -191,16 +245,21 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
                       Species)
     )
   file1_df <- readr::read_csv(file.path(raw_dir, "supplementary_file1_408species.csv"),
-                              show_col_types = FALSE) %>% 
-                dplyr::mutate(Species =
-                                dplyr::if_else(
-                                  Species=="Morexalla catarrhalis",
-                                  "Moraxella catarrhalis",
-                                  Species)
-                              )
-
+                              show_col_types = FALSE) %>%
+    dplyr::mutate(Species =
+                    dplyr::if_else(
+                      Species=="Morexalla catarrhalis",
+                      "Moraxella catarrhalis",
+                      Species)
+    )
+  full_sample_size_df <-
+    readr::read_csv("./data/raw/supplementary_file12_isolate_counts.csv")
+  negexp_sample_size_df <-
+    readr::read_csv("./data/raw/supplementary_file12_negExp_isolate_counts.csv")
+  
+  # Match taxa names
   horsfield_matched <-
-    match_horsfield_to_taxa(rec_df$species, file1_df) %>% 
+    match_horsfield_to_taxa(rec_df$species, file1_df) %>%
     dplyr::left_join(
       match_horsfield_to_taxa(rec_df$species,
                               file8_df %>%
@@ -208,26 +267,39 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
                                                             names=c("Genus","specific_name"),
                                                             delim=" ",
                                                             cols_remove = FALSE,
-                                                            too_many = "drop") %>% 
+                                                            too_many = "drop") %>%
                                 dplyr::mutate(Mean_genome_size = file8_df$Pangenome_size*file8_df$Avg_genome_size) %>%
-                                dplyr::select(Species,Genus,Mean_genome_size) %>% 
+                                dplyr::select(Species,Genus,Mean_genome_size) %>%
                                 dplyr::distinct()
-                              ) %>% dplyr::select(-n_matched),
+      ) %>% dplyr::select(-n_matched),
       by = "species"
     )
-
+  
   full_df <- rec_df %>%
     dplyr::left_join(horsfield_matched, by = "species")
-
+  
   negexp_matched <- match_negexp_to_taxa(rec_df$species, file8_df)
-
+  
+  # Process rates
   negexp_df <- full_df %>%
-    dplyr::inner_join(negexp_matched, by = "species") %>% 
+    dplyr::inner_join(negexp_matched, by = "species") %>%
     dplyr::mutate(
       yint_times_genome       = `Proportion fast genes_Median`       * Mean_genome_size,
       yint_times_genome_lwr   = `Proportion fast genes_Lower_CI`       * Mean_genome_size,
       yint_times_genome_upr   = `Proportion fast genes_Upper_CI`   * Mean_genome_size
     )
-
+  
+  # Add sample sizes
+  file1_df <-
+    file1_df %>%
+    dplyr::mutate(Species_std = standardise_species(Species)) %>% 
+    dplyr::left_join(full_sample_size_df %>%
+                       dplyr::mutate(Species_std = standardise_species(Species)) %>% 
+                       dplyr::select(-Species),
+                     by = "Species_std")
+  full_df <- full_df %>% get_sample_sizes(full_sample_size_df)
+  negexp_df <- negexp_df %>% get_sample_sizes(negexp_sample_size_df)
+  
+  # Return file datasets
   list(raw_atb = file1_df, full_df = full_df, negexp_df = negexp_df)
 }

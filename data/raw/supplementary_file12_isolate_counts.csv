@@ -1,0 +1,409 @@
+"","Species","n_isolates"
+"1","Achromobacter ruhlandii",53
+"2","Achromobacter xylosoxidans",272
+"3","Acinetobacter baumannii",4986
+"4","Acinetobacter baylyi",94
+"5","Acinetobacter bereziniae",70
+"6","Acinetobacter haemolyticus",50
+"7","Acinetobacter johnsonii",69
+"8","Acinetobacter nosocomialis",260
+"9","Acinetobacter pittii",509
+"10","Acinetobacter ursingii",67
+"11","Actinobacillus lignieresii",447
+"12","Aeromonas caviae",746
+"13","Aeromonas dhakensis",121
+"14","Aeromonas enteropelogenes",74
+"15","Aeromonas hydrophila",122
+"16","Aeromonas salmonicida",251
+"17","Aeromonas veronii",345
+"18","Agrobacterium fabacearum",63
+"19","Akkermansia sp004167605",54
+"20","Aliarcobacter butzleri",162
+"21","Aliivibrio fischeri",173
+"22","Alistipes onderdonkii",221
+"23","Arthrobacter sp002008315",61
+"24","Bacillus a anthracis",1503
+"25","Bacillus a bombysepticus",353
+"26","Bacillus a cereus",315
+"27","Bacillus a mobilis",134
+"28","Bacillus a mycoides",131
+"29","Bacillus a paranthracis",640
+"30","Bacillus a thuringiensis",308
+"31","Bacillus a thuringiensis s",137
+"32","Bacillus a toyonensis",102
+"33","Bacillus a wiedmannii",154
+"34","Bacillus licheniformis",80
+"35","Bacillus pumilus",90
+"36","Bacillus subtilis",1381
+"37","Bacillus velezensis",168
+"38","Bacteroides caccae",112
+"39","Bacteroides fragilis",888
+"40","Bacteroides ovatus",208
+"41","Bacteroides stercoris",89
+"42","Bacteroides thetaiotaomicron",370
+"43","Bacteroides uniformis",190
+"44","Bacteroides xylanisolvens",112
+"45","Bartonella krasnovii",276
+"46","Bifidobacterium adolescentis",315
+"47","Bifidobacterium animalis",274
+"48","Bifidobacterium bifidum",143
+"49","Bifidobacterium breve",145
+"50","Bifidobacterium infantis",82
+"51","Bifidobacterium longum",776
+"52","Bifidobacterium pseudocatenulatum",362
+"53","Bordetella hinzii",63
+"54","Bordetella holmesii",88
+"55","Bordetella pertussis",4459
+"56","Borreliella burgdorferi",254
+"57","Borreliella garinii",105
+"58","Brachyspira hyodysenteriae",169
+"59","Bradyrhizobium diazoefficiens",123
+"60","Brucella melitensis",2469
+"61","Burkholderia ambifaria",86
+"62","Burkholderia cenocepacia",411
+"63","Burkholderia cepacia",232
+"64","Burkholderia contaminans",148
+"65","Burkholderia gladioli",260
+"66","Burkholderia mallei",4830
+"67","Burkholderia multivorans",366
+"68","Burkholderia orbicola",160
+"69","Burkholderia sp002223185",61
+"70","Burkholderia stabilis",66
+"71","Burkholderia stagnalis",97
+"72","Burkholderia thailandensis",51
+"73","Burkholderia ubonensis",262
+"74","Burkholderia vietnamiensis",154
+"75","Campylobacter d coli",4856
+"76","Campylobacter d coli a",338
+"77","Campylobacter d coli b",146
+"78","Campylobacter d concheus",156
+"79","Campylobacter d jejuni",4986
+"80","Campylobacter d jejuni a",95
+"81","Campylobacter d lari",554
+"82","Campylobacter d lari c",68
+"83","Campylobacter d lari d",60
+"84","Campylobacter d upsaliensis",654
+"85","Campylobacter fetus",506
+"86","Campylobacter hyointestinalis",82
+"87","Campylobacter sp002139915",54
+"88","Caulobacter vibrioides",226
+"89","Chlamydia trachomatis",1016
+"90","Chlamydophila abortus",51
+"91","Chlamydophila pecorum",54
+"92","Citrobacter a amalonaticus",141
+"93","Citrobacter a farmeri",101
+"94","Citrobacter a rodentium",224
+"95","Citrobacter a sedlakii",101
+"96","Citrobacter b koseri",210
+"97","Citrobacter braakii",265
+"98","Citrobacter europaeus",54
+"99","Citrobacter freundii",1552
+"100","Citrobacter gillenii",55
+"101","Citrobacter portucalensis",318
+"102","Citrobacter werkmanii",233
+"103","Citrobacter youngae",101
+"104","Clostridioides difficile",4504
+"105","Clostridium aq innocuum",116
+"106","Clostridium beijerinckii",117
+"107","Clostridium botulinum a",242
+"108","Clostridium butyricum",65
+"109","Clostridium cagae",107
+"110","Clostridium chauvoei",80
+"111","Clostridium f botulinum",648
+"112","Clostridium f sporogenes",79
+"113","Colwellia psychrerythraea a",85
+"114","Corynebacterium diphtheriae",1681
+"115","Corynebacterium glutamicum",171
+"116","Corynebacterium jeikeium c",64
+"117","Corynebacterium pseudodiphtheriticum",64
+"118","Corynebacterium striatum",351
+"119","Corynebacterium ulcerans",144
+"120","Coxiella burnetii",64
+"121","Cronobacter sakazakii",679
+"122","Curtobacterium flaccumfaciens",123
+"123","Cutibacterium acnes",321
+"124","Deinococcus radiodurans",157
+"125","Dichelobacter nodosus",149
+"126","Elizabethkingia anophelis",550
+"127","Enterobacter asburiae",294
+"128","Enterobacter asburiae b",213
+"129","Enterobacter bugandensis",223
+"130","Enterobacter chengduensis",76
+"131","Enterobacter cloacae",938
+"132","Enterobacter cloacae m",399
+"133","Enterobacter hormaechei",6173
+"134","Enterobacter kobei",757
+"135","Enterobacter ludwigii",223
+"136","Enterobacter roggenkampii",479
+"137","Enterobacter sichuanensis",61
+"138","Enterococcus b durans",273
+"139","Enterococcus b faecium",4625
+"140","Enterococcus b hirae",953
+"141","Enterococcus b lactis",995
+"142","Enterococcus b mundtii",79
+"143","Enterococcus b pernyi",79
+"144","Enterococcus d casseliflavus",97
+"145","Enterococcus d gallinarum",247
+"146","Enterococcus d innesii",53
+"147","Enterococcus e cecorum",187
+"148","Enterococcus faecalis",4980
+"149","Erwinia amylovora",108
+"150","Erwinia tracheiphila",52
+"151","Erysipelothrix rhusiopathiae",526
+"152","Escherichia albertii",614
+"153","Escherichia coli",4989
+"154","Escherichia fergusonii",199
+"155","Escherichia marmotae",243
+"156","Escherichia ruysiae",109
+"157","Flavobacterium psychrophilum",113
+"158","Francisella tularensis",783
+"159","Fusobacterium c necrophorum",360
+"160","Gallibacterium anatis",90
+"161","Glaesserella parasuis",519
+"162","Haemophilus d parainfluenzae j",50
+"163","Haemophilus haemolyticus",158
+"164","Haemophilus influenzae",4994
+"165","Haemophilus influenzae d",1300
+"166","Haemophilus influenzae e",1765
+"167","Haemophilus influenzae g",959
+"168","Haemophilus seminalis",66
+"169","Hafnia alvei",67
+"170","Hafnia paralvei",152
+"171","Helicobacter c cinaedi",60
+"172","Helicobacter pylori",1836
+"173","Helicobacter pylori bu",172
+"174","Helicobacter pylori c",388
+"175","Histophilus somni",88
+"176","Hungateiclostridium thermocellum",284
+"177","Janthinobacterium lividum e",108
+"178","Klebsiella aerogenes",1178
+"179","Klebsiella africana",69
+"180","Klebsiella grimontii",525
+"181","Klebsiella michiganensis",1295
+"182","Klebsiella ornithinolytica",495
+"183","Klebsiella oxytoca",858
+"184","Klebsiella planticola",230
+"185","Klebsiella pneumoniae",4983
+"186","Klebsiella quasipneumoniae",3022
+"187","Klebsiella terrigena",79
+"188","Klebsiella variicola",2396
+"189","Lacticaseibacillus paracasei",415
+"190","Lacticaseibacillus rhamnosus",360
+"191","Lactiplantibacillus pentosus",54
+"192","Lactiplantibacillus plantarum",475
+"193","Lactobacillus acidophilus",95
+"194","Lactobacillus crispatus",81
+"195","Lactobacillus gasseri",61
+"196","Lactobacillus helveticus",70
+"197","Lactobacillus johnsonii",204
+"198","Lactobacillus paragasseri",168
+"199","Lactococcus cremoris",89
+"200","Lactococcus lactis",202
+"201","Legionella fraseri",325
+"202","Legionella longbeachae",177
+"203","Legionella pneumophila",4981
+"204","Leptospira borgpetersenii",129
+"205","Leptospira interrogans",457
+"206","Leptospira kirschneri",51
+"207","Ligilactobacillus salivarius",166
+"208","Limosilactobacillus fermentum",204
+"209","Limosilactobacillus mucosae",54
+"210","Limosilactobacillus reuteri",249
+"211","Limosilactobacillus reuteri e",50
+"212","Listeria a booriae",85
+"213","Listeria grayi",84
+"214","Listeria innocua",1417
+"215","Listeria monocytogenes",4988
+"216","Listeria monocytogenes b",4706
+"217","Listeria monocytogenes c",166
+"218","Listeria seeligeri",241
+"219","Listeria welshimeri",306
+"220","Macrococcus b caseolyticus",89
+"221","Mammaliicoccus lentus",50
+"222","Mammaliicoccus sciuri",411
+"223","Mannheimia haemolytica",1714
+"224","Mesomycoplasma hyopneumoniae",115
+"225","Mesomycoplasma hyorhinis",82
+"226","Mesorhizobium sp006442685",62
+"227","Metamycoplasma hominis",64
+"228","Micrococcus luteus",247
+"229","Micromonospora arenicola",59
+"230","Moraxella bovoculi",218
+"231","Moraxella catarrhalis",1248
+"232","Morganella morganii",297
+"233","Mycobacterium abscessus",4997
+"234","Mycobacterium avium",2817
+"235","Mycobacterium chelonae",170
+"236","Mycobacterium fortuitum",75
+"237","Mycobacterium intracellulare",1634
+"238","Mycobacterium kansasii",440
+"239","Mycobacterium marinum",997
+"240","Mycobacterium smegmatis",244
+"241","Mycobacterium tuberculosis",4836
+"242","Mycoplasma capri",102
+"243","Mycoplasmoides gallisepticum",65
+"244","Mycoplasmoides pneumoniae",218
+"245","Mycoplasmopsis a anserisalpingitidis",53
+"246","Mycoplasmopsis agalactiae",88
+"247","Mycoplasmopsis bovis",1190
+"248","Neisseria bergeri",130
+"249","Neisseria elongata",50
+"250","Neisseria flavescens",105
+"251","Neisseria gonorrhoeae",4969
+"252","Neisseria lactamica",1302
+"253","Neisseria meningitidis",4998
+"254","Neisseria perflava",61
+"255","Neisseria polysaccharea",108
+"256","Nitratidesulfovibrio vulgaris",67
+"257","Nocardia cyriacigeorgica",85
+"258","Oenococcus oeni",125
+"259","Ornithobacterium rhinotracheale",144
+"260","Paenibacillus h larvae",749
+"261","Parabacteroides distasonis",118
+"262","Paraclostridium sordellii",53
+"263","Pasteurella multocida",759
+"264","Pectobacterium brasiliense",67
+"265","Pedobacter sp005938645",50
+"266","Phaeobacter inhibens",76
+"267","Phocaeicola dorei",88
+"268","Phocaeicola vulgatus",267
+"269","Photorhabdus bodei",53
+"270","Porphyromonas gingivalis",82
+"271","Priestia megaterium",185
+"272","Proteus mirabilis",1087
+"273","Protochlamydia amoebophila",75
+"274","Providencia c stuartii",104
+"275","Providencia rettgeri d",63
+"276","Pseudoalteromonas nigrifaciens",172
+"277","Pseudomonas aeruginosa",4941
+"278","Pseudomonas aeruginosa a",127
+"279","Pseudomonas e alloputida",492
+"280","Pseudomonas e amygdali",51
+"281","Pseudomonas e asiatica",100
+"282","Pseudomonas e avellanae",382
+"283","Pseudomonas e fulva",88
+"284","Pseudomonas e glycinae",185
+"285","Pseudomonas e juntendi",72
+"286","Pseudomonas e marginalis",474
+"287","Pseudomonas e monteilii",92
+"288","Pseudomonas e paracarnis",101
+"289","Pseudomonas e protegens",135
+"290","Pseudomonas e shahriarae",61
+"291","Pseudomonas e sp005938045",85
+"292","Pseudomonas e syringae m",59
+"293","Pseudomonas e viridiflava",57
+"294","Pseudomonas f otitidis",55
+"295","Pseudonocardia sp001294645",75
+"296","Pseudosulfitobacter pseudonitzschiae",96
+"297","Ralstonia pseudosolanacearum",248
+"298","Ralstonia solanacearum",313
+"299","Rhizobium leguminosarum",95
+"300","Rhizobium rhizogenes",64
+"301","Ruegeria b pomeroyi",86
+"302","Salinibacter ruber",85
+"303","Salmonella arizonae",1617
+"304","Salmonella bongori",159
+"305","Salmonella diarizonae",3466
+"306","Salmonella enterica",4974
+"307","Salmonella houtenae",3563
+"308","Sarcina perfringens",1294
+"309","Serratia bockelmannii",162
+"310","Serratia entomophila",84
+"311","Serratia j liquefaciens",69
+"312","Serratia marcescens",923
+"313","Serratia marcescens k",779
+"314","Serratia nematodiphila",129
+"315","Serratia nevei",647
+"316","Serratia ureilytica",244
+"317","Sinorhizobium medicae",185
+"318","Sinorhizobium meliloti",494
+"319","Sphingomonas aerolata",50
+"320","Sphingomonas sp001421535",52
+"321","Sphingomonas sp024072375",65
+"322","Staphylococcus argenteus",575
+"323","Staphylococcus aureus",4993
+"324","Staphylococcus borealis",57
+"325","Staphylococcus capitis",1402
+"326","Staphylococcus chromogenes",255
+"327","Staphylococcus coagulans",97
+"328","Staphylococcus cohnii",55
+"329","Staphylococcus delphini",61
+"330","Staphylococcus epidermidis",4358
+"331","Staphylococcus haemolyticus",1007
+"332","Staphylococcus hominis",296
+"333","Staphylococcus lugdunensis",103
+"334","Staphylococcus pseudintermedius",3628
+"335","Staphylococcus saprophyticus",638
+"336","Staphylococcus simulans",286
+"337","Staphylococcus ureilyticus",68
+"338","Staphylococcus warneri",157
+"339","Staphylococcus xylosus",281
+"340","Stenotrophomonas geniculata",99
+"341","Stenotrophomonas indicatrix",57
+"342","Stenotrophomonas maltophilia",1486
+"343","Stenotrophomonas maltophilia a",354
+"344","Stenotrophomonas maltophilia aj",67
+"345","Stenotrophomonas maltophilia am",103
+"346","Stenotrophomonas maltophilia f",231
+"347","Stenotrophomonas maltophilia q",51
+"348","Stenotrophomonas pavanii",81
+"349","Stenotrophomonas sepilia",118
+"350","Streptococcus agalactiae",4983
+"351","Streptococcus anginosus",114
+"352","Streptococcus canis",132
+"353","Streptococcus dysgalactiae",1306
+"354","Streptococcus equi",1437
+"355","Streptococcus gordonii",92
+"356","Streptococcus iniae",89
+"357","Streptococcus mutans",400
+"358","Streptococcus oralis",233
+"359","Streptococcus pneumoniae",4987
+"360","Streptococcus pseudopneumoniae",734
+"361","Streptococcus pyogenes",4987
+"362","Streptococcus salivarius",121
+"363","Streptococcus sanguinis",92
+"364","Streptococcus suis",2768
+"365","Streptococcus suis p",153
+"366","Streptococcus suis w",199
+"367","Streptococcus uberis",715
+"368","Streptomyces albidoflavus",113
+"369","Streptomyces anthocyanicus",85
+"370","Stutzerimonas stutzeri",207
+"371","Sulfitobacter mediterraneus",74
+"372","Synechocystis sp000284455",95
+"373","Tatlockia micdadei",51
+"374","Taylorella equigenitalis",194
+"375","Tenacibaculum finnmarkense a",66
+"376","Thermoanaerobacterium aotearoense",72
+"377","Thermus thermophilus",56
+"378","Treponema pallidum",407
+"379","Turicibacter sanguinis",178
+"380","Vibrio aestuarianus",51
+"381","Vibrio alginolyticus",371
+"382","Vibrio anguillarum",135
+"383","Vibrio cholerae",4822
+"384","Vibrio crassostreae",60
+"385","Vibrio diabolicus",108
+"386","Vibrio fluvialis",191
+"387","Vibrio harveyi",54
+"388","Vibrio mediterranei",184
+"389","Vibrio metschnikovii",139
+"390","Vibrio mimicus",59
+"391","Vibrio owensii",53
+"392","Vibrio parahaemolyticus",4950
+"393","Vibrio splendidus",73
+"394","Vibrio vulnificus",760
+"395","Wolbachia pipientis",145
+"396","Xanthomonas arboricola",71
+"397","Xanthomonas cissicola",162
+"398","Xanthomonas euvesicatoria",734
+"399","Xanthomonas hortorum",143
+"400","Xanthomonas oryzae",268
+"401","Xanthomonas phaseoli",81
+"402","Xylella fastidiosa",151
+"403","Yersinia alsatica",56
+"404","Yersinia enterocolitica",1847
+"405","Yersinia intermedia",80
+"406","Yersinia massiliensis",58
+"407","Yersinia pestis",1954
+"408","Yersinia ruckeri",90

@@ -123,3 +123,15 @@ like a genus-level match: it averages across *all* rows sharing that
 rows, and the duplicate *Serratia sarumanii* / *Enterobacter asburiae_B*
 rows are both included (each counted once) within the *Serratia* spp. /
 *Enterobacter* spp. genus-level means.
+
+## Sample size calculations
+
+The counts of isolates in `supplementary_file12_negExp_isolate_counts` and `supplementary_file12_isolate_counts`
+were calculated from the original Supplementary File 12 of Horsfield *et al*. and stored in summarised
+form to keep the repository size small. The processing used the workflow:
+
+```
+supp12_df %>%
+  dplyr::group_by(Species) %>%
+  dplyr::summarise(n_isolates = dplyr::n_distinct(Accession))
+```
