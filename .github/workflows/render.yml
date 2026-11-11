@@ -59,6 +59,10 @@ jobs:
             any::scales
             any::broom
             any::ggExtra
+            any::emmeans
+            any::glmmTMB
+            any::numDeriv
+            any::nlme
 
       - name: Knit main R Markdown document
         run: |
