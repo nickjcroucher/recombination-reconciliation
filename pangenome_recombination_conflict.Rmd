@@ -24,9 +24,12 @@ library(scales)
 library(ggExtra)
 library(emmeans)
 library(glmmTMB)
+library(numDeriv)
+library(nlme)
 
 source("R/data_prep.R")
 source("R/helpers.R")
+source("R/model_fitting.R")
 
 ```
 
@@ -89,7 +92,8 @@ full_df %>%
     Taxon                        = species,
     Transformability,
     Niche,
-    `Isolates (n)`                = n_isolates,
+    `Isolates in Horsfield et al` = Horsfield_n_isolates,
+    `Isolates in Kwun & Croucher` = Kwun_n_isolates,
     `Expected prophage / genome`  = round(lambda_hat, 2),
     `HR probability`              = round(`Recombination probability`, 2),
     `Pangenome size (pan_genes)`  = pan_genes
@@ -505,221 +509,23 @@ combined_df <- distances_df_downsampled %>%
                    by = c("species"="matched_species")) %>%
   dplyr::filter(!is.na(Transformability))
 
-# Fit model
-transf_model <-
-  glmmTMB::glmmTMB(Accessory~Core+Transformability+(1|species),
-                   data=combined_df,
-                   family=beta_family()
-                   )
-
-# 2. Extract quick visual guesses for starting values
-j_start <- combined_df$Accessory[which.min(combined_df$Core)]     # Value of y at the minimum x (approx intercept)
-i_start <- max(combined_df$Accessory)                  # Approximate plateau
-
-# 3. Fit the NLS model
-fit <- nls(
-  Accessory ~ i - (i - j) * exp(k * Core), 
-  data = combined_df, 
-  start = list(i = i_start, j = j_start, k = -0.0001),
-  algorithm = "port"
-)
-
-# 1. Create a dense grid of X values for smooth lines
-pred_grid <- expand.grid(
-  Core = seq(min(combined_df$Core), max(combined_df$Core), length.out = 200),
-  Transformability = unique(combined_df$Transformability)
-)
-
-# 2. Add the predicted NLS response to the grid
-# Replace 'fit' with your final converged NLS model object
-pred_grid$response <- predict(fit, newdata = pred_grid)
-
-# 3. For the ribbon (confidence intervals), standard nls doesn't give direct SEs.
-# As a robust workaround, we can calculate standard errors using propagation of error (delta method):
-# Alternatively, if you want just the line first, you can omit ymin/ymax variables.
-library(investr)
-# This extracts the lower and upper prediction/confidence bands
-intervals <- predFit(fit, newdata = pred_grid, interval = "confidence", level = 0.95)
-pred_grid$asymp.LCL <- intervals[, "lwr"]
-pred_grid$asymp.UCL <- intervals[, "upr"]
-
-# Plot scatterplot 
-p <- 
+# Plot scatterplot
+p <-
   ggplot(combined_df,
          aes(x = Core,
              y = Accessory,
              colour = Transformability)
          ) +
-    geom_point(alpha = 0.25)
-
-p_summary <-
-  p +
-    geom_ribbon(
-        data = pred,
-        aes(
-            x = Core,
-            ymin = asymp.LCL,
-            ymax = asymp.UCL,
-            fill = Transformability,
-            group = Transformability
-        ),
-        alpha = 0.1,
-        inherit.aes = FALSE
-    ) +
-    geom_line(
-        data = pred,
-        aes(
-            x = Core,
-            y = response,
-            colour = Transformability,
-            group = Transformability
-        ),
-        linewidth = 1.2,
-        alpha = 0.75,
-        inherit.aes = FALSE
-    ) +
-  scale_colour_manual(values = transformability_palette,
-                      aesthetics = c("colour", "fill")) +
-  theme_bw() +
-  theme(legend.position = "bottom")
-
-ggMarginal(p_summary, type="density", groupColour = TRUE, groupFill = TRUE)
-
-###
-
-# 1. Define the structural nonlinear model formula
-# (The RHS names 'i', 'j', 'k' are treated as structural parameters)
-nl_expr <- Accessory ~ i - (i - j) * exp(k * Core)
-
-# 2. Set up initial values for the fixed effects.
-# If a parameter has a fixed effect covariate (Phenotype), you need a starting 
-# value for BOTH the intercept and the slope of that covariate.
-# Format: c(Intercept, Slope)
-start_vals <- c(
-  i = c(0.1, 0.1),   # i ~ Phenotype (Intercept start, Phenotype slope start)
-  j = c(0.01, 0.01),   # j ~ Phenotype (Intercept start, Phenotype slope start)
-  k = c(-100, -100)           # k ~ 1         (Only global intercept start)
-)
-
-# 3. Fit the Nonlinear Mixed-Effects Model
-fit_mixed <- nlme(
-  model = nl_expr,
-  data = combined_df %>% dplyr::mutate(Transformability = as.factor(Transformability),species = as.factor(species)),
-  
-  # FIXED EFFECTS: Define the linear models for each structural parameter
-  fixed = list(
-    i ~ Transformability, 
-    j ~ Transformability, 
-    k ~ Transformability
-  ),
-  
-  # RANDOM EFFECTS: Species-dependent random deviations allowed on i and j
-  random = i + j ~ 1 | species,
-  
-  start = start_vals,
-  control = nlmeControl(
-    maxiter = 200, 
-    msMaxIter = 200, 
-    pnlsMaxIter = 50,    # Give the PNLS step more attempts
-    minScale = 1e-5,     # Lower the step-halving limit floor
-    tolerance = 1e-3     # Slightly loosen precision required for convergence
-  )
-)
-
-pred_grid <- expand_grid(
-  Core = seq(
-    min(combined_df$Core, na.rm = TRUE),
-    max(combined_df$Core, na.rm = TRUE),
-    length.out = 200
-  ),
-  Transformability = levels(as.factor(combined_df$Transformability))
-)
-
-pred_grid$Transformability <- factor(
-  pred_grid$Transformability,
-  levels = levels(as.factor(combined_df$Transformability))
-)
-
-# Fixed-effect predictions
-pred_grid$response <- predict(
-  fit_mixed,
-  newdata = pred_grid,
-  level = 0
-)
-
-# Extract fixed effects and their covariance matrix
-beta <- fixef(fit_mixed)
-V <- vcov(fit_mixed)
-
-# Function to calculate predictions from fixed effects
-predict_fixed <- function(beta, newdata) {
-
-  # Extract design matrices for each structural parameter
-  X_i <- model.matrix(~ Transformability, newdata)
-  X_j <- model.matrix(~ Transformability, newdata)
-  X_k <- model.matrix(~ Transformability, newdata)
-
-  # Parameter estimates
-  i <- as.vector(X_i %*% beta[grep("^i\\.", names(beta)) |
-                                names(beta) == "i"])
-  j <- as.vector(X_j %*% beta[grep("^j\\.", names(beta)) |
-                                names(beta) == "j"])
-  k <- as.vector(X_k %*% beta[grep("^k\\.", names(beta)) |
-                                names(beta) == "k"])
-
-  # Nonlinear response
-  i - (i - j) * exp(k * newdata$Core)
-}
-
-# Prediction function using the fitted model's fixed effects
-pred_fun <- function(beta, newdata) {
-
-  b <- beta
-  names(b) <- names(fixef(fit_mixed))
-
-  # Update fixed effects temporarily in the prediction calculation
-  X_i <- model.matrix(~ Transformability, newdata)
-  X_j <- model.matrix(~ Transformability, newdata)
-  X_k <- model.matrix(~ Transformability, newdata)
-
-  i_names <- grep("^i\\.", names(b), value = TRUE)
-  j_names <- grep("^j\\.", names(b), value = TRUE)
-  k_names <- grep("^k\\.", names(b), value = TRUE)
-
-  i <- drop(X_i %*% b[i_names])
-  j <- drop(X_j %*% b[j_names])
-  k <- drop(X_k %*% b[k_names])
-
-  i - (i - j) * exp(k * newdata$Core)
-}
-
-# Numerical Jacobian
-J <- jacobian(
-  func = function(b) pred_fun(b, pred_grid),
-  x = beta
-)
-
-# Variance of predictions
-pred_var <- diag(J %*% V %*% t(J))
-
-# Standard errors
-pred_se <- sqrt(pred_var)
-
-# 95% confidence intervals
-pred_grid <- pred_grid %>%
-  mutate(
-    asymp.LCL = response - 1.96 * pred_se,
-    asymp.UCL = response + 1.96 * pred_se
-  )
-
-###
+    geom_point(alpha = 0.25) +
+    scale_colour_manual(values = transformability_palette,
+                        aesthetics = c("colour", "fill"))
 
 ```
 
 
 ``` {r Model fitting}
 
-
+nl_expr <- Accessory ~ i - (i - j) * exp(k * Core)
 
 transformable_model <-
   fit_nlme_model(combined_df %>% dplyr::filter(Transformability=="Transformable"))
@@ -741,14 +547,113 @@ nlme_prediction_df <- dplyr::bind_rows(
     dplyr::mutate(Transformability="Non-transformable")
 )
 
+# Calculate p values
+param_vals <-
+  dplyr::bind_rows(
+    as.data.frame(intervals(transformable_model,
+                  which = "fixed")$fixed) %>%
+      rownames_to_column("parameter") %>%
+      dplyr::mutate(Transformability = "Transformable"),
+    as.data.frame(intervals(non_transformable_model,
+                  which = "fixed")$fixed) %>%
+      rownames_to_column("parameter") %>%
+      dplyr::mutate(Transformability = "Non-transformable")
+  ) %>% 
+  dplyr::mutate(parameter = factor(parameter))
+
+# Calculate p values
+pvals <- list()
+for (param in c("i","j","k")) {
+  pvals[[param]] <- parameter_pval(transformable_model,non_transformable_model,param)
+}
+pval_df <- data.frame(
+  parameter = names(pvals),
+  p_value = unlist(pvals)
+) %>%
+  mutate(
+    p_label = paste0(
+      "italic(P) == ",
+      ifelse(p_value < 0.001,
+             "< 0.001",
+             sprintf("%.3f", p_value))
+    )
+  )
+
+# Calculate positions for P-value annotations
+pval_df <- pval_df %>%
+  left_join(
+    param_vals %>%
+      group_by(parameter) %>%
+      summarise(
+        y_pos = max(upper) +
+          0.12 * (max(upper) - min(lower)),
+        .groups = "drop"
+      ),
+    by = "parameter"
+  )
+
+# Plot
+ggplot(
+  param_vals,
+  aes(
+    x = Transformability,
+    y = est.,
+    colour = Transformability
+  )
+) +
+  geom_point(
+    size = 3,
+    position = position_dodge(width = 0.3)
+  ) +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper),
+    width = 0.15,
+    linewidth = 0.8
+  ) +
+  geom_text(
+    data = pval_df,
+    aes(
+      x = 1.5,
+      y = y_pos,
+      label = p_label
+    ),
+    inherit.aes = FALSE,
+    parse = TRUE,
+    size = 4
+  ) +
+  facet_wrap(
+    ~ parameter,
+    scales = "free_y",
+    nrow = 1
+  ) +
+  labs(
+    x = "Transformability",
+    y = "Parameter estimate",
+    colour = "Transformability"
+  ) +
+  scale_colour_manual(values = transformability_palette,
+                      aesthetics = c("colour", "fill")) +
+  theme_bw() +
+  theme(
+    strip.background = element_blank(),
+    strip.text = element_text(face = "italic", size = 12),
+    legend.position = "none",
+    axis.title = element_text(size = 12),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+  )
+
+```
+
+``` {r Predict overall evolutionary trajectories}
+
 p_summary <-
   p +
     geom_ribbon(
         data = nlme_prediction_df,
         aes(
             x = Core,
-            ymin = asymp.LCL,
-            ymax = asymp.UCL,
+            ymin = lower,
+            ymax = upper,
             fill = Transformability,
             group = Transformability
         ),
@@ -759,7 +664,7 @@ p_summary <-
         data = nlme_prediction_df,
         aes(
             x = Core,
-            y = response,
+            y = fit,
             colour = Transformability,
             group = Transformability
         ),
@@ -767,90 +672,38 @@ p_summary <-
         alpha = 0.75,
         inherit.aes = FALSE
     ) +
-    scale_colour_manual(values = transformability_palette,
-                        aesthetics = c("colour", "fill")) +
     theme_bw() +
     theme(legend.position = "bottom")
 
-
-# Fixed effects
-beta_T <- fixef(transformable_model)
-beta_NT <- fixef(non_transformable_model)
-
-# Variance-covariance matrices
-V_T <- vcov(transformable_model)
-V_NT <- vcov(non_transformable_model)
-
-# Parameter estimates
-beta_T
-beta_NT
-
-
-# Extract standard errors
-SE_T <- sqrt(diag(V_T))
-SE_NT <- sqrt(diag(V_NT))
-
-# Calculate parameter differences
-differences <- beta_T - beta_NT
-
-# Standard errors of differences
-SE_diff <- sqrt(SE_T^2 + SE_NT^2)
-
-# Wald statistics
-z_values <- differences / SE_diff
-
-# Two-sided p-values
-p_values <- 2 * pnorm(abs(z_values), lower.tail = FALSE)
-
-# Confidence intervals
-LCL <- differences - 1.96 * SE_diff
-UCL <- differences + 1.96 * SE_diff
-
-# Results table
-parameter_comparison <- data.frame(
-  Parameter = names(differences),
-  Transformable = as.numeric(beta_T),
-  Non_transformable = as.numeric(beta_NT),
-  Difference = as.numeric(differences),
-  SE_difference = as.numeric(SE_diff),
-  Z = as.numeric(z_values),
-  LCL = as.numeric(LCL),
-  UCL = as.numeric(UCL),
-  p_value = as.numeric(p_values)
-)
-
-# Multiple testing correction
-parameter_comparison$p_adjusted <- p.adjust(
-  parameter_comparison$p_value,
-  method = "holm"
-)
-
-parameter_comparison
+ggMarginal(p_summary, type="density", groupColour = TRUE, groupFill = TRUE)
 
 ```
 
+
 ```{r Per species, fig.height=11, fig.width=11}
 
-
-
-pred_species <- tidyr::crossing(
-  pred_grid,
-  species = unique(combined_df$species)
+# Get predictions for each species
+nlme_species_prediction_df <- dplyr::bind_rows(
+  make_nlme_prediction(transformable_model,
+                       combined_df %>%
+                         dplyr::filter(Transformability=="Transformable"),
+                       prediction_level = 1) %>% 
+    dplyr::mutate(Transformability="Transformable"),
+  make_nlme_prediction(non_transformable_model,
+                       combined_df %>%
+                         dplyr::filter(Transformability=="Non-transformable"),
+                       prediction_level = 1) %>% 
+    dplyr::mutate(Transformability="Non-transformable")
 )
 
-pred_species$response <- predict(
-  fit_mixed,
-  newdata = pred_species,
-  level = 1
-)
-
-p +
+# Plot species specific trajectories
+(p +
     geom_ribbon(
-        data = pred_species,
+        data = nlme_species_prediction_df,
         aes(
             x = Core,
-            ymin = asymp.LCL,
-            ymax = asymp.UCL,
+            ymin = lower,
+            ymax = upper,
             fill = Transformability,
             group = Transformability
         ),
@@ -858,10 +711,10 @@ p +
         inherit.aes = FALSE
     ) +
     geom_line(
-        data = pred_species,
+        data = nlme_species_prediction_df,
         aes(
             x = Core,
-            y = response,
+            y = fit,
             colour = Transformability,
             group = Transformability
         ),
@@ -869,8 +722,13 @@ p +
         alpha = 0.75,
         inherit.aes = FALSE
     ) +
+  ylab("Pairwise accessory distances") +
+  xlab("Pairwise core distances") +
   facet_wrap(~species) +
-  theme(strip.backgroup = element_blank())
+  theme(strip.background = element_blank(),
+        strip.text = element_text(face = "italic", size = 10),
+        legend.position = "bottom")
+)
 
 ```
 

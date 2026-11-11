@@ -182,11 +182,11 @@ match_negexp_to_taxa <- function(taxon_vec, file8_df) {
   })
 }
 
-get_sample_sizes <- function(df1,df2) {
+get_sample_sizes <- function(df1,df2,species_list) {
   
   df1 %>% 
     dplyr::rename(Kwun_n_isolates = any_of("n_isolates")) %>% 
-    dplyr::left_join(match_horsfield_to_taxa(rec_df$species,
+    dplyr::left_join(match_horsfield_to_taxa(species_list,
                                              df2 %>%
                                                tidyr::separate_wider_delim(Species,
                                                                            names=c("Genus","specific_name"),
@@ -276,7 +276,8 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
     )
   
   full_df <- rec_df %>%
-    dplyr::left_join(horsfield_matched, by = "species")
+    dplyr::left_join(horsfield_matched,
+                     by = "species")
   
   negexp_matched <- match_negexp_to_taxa(rec_df$species, file8_df)
   
@@ -290,15 +291,24 @@ build_analysis_datasets <- function(raw_dir = "data/raw") {
     )
   
   # Add sample sizes
+  file1_numeric_cols <- names(file1_df)[vapply(file1_df, is.numeric, logical(1))]
   file1_df <-
     file1_df %>%
     dplyr::mutate(Species_std = standardise_species(Species)) %>% 
+    dplyr::group_by(Species_std) %>% 
+    dplyr::summarise(
+      dplyr::across(
+        dplyr::all_of(file1_numeric_cols),
+        ~ sum(.x, na.rm = TRUE)
+      )
+    ) %>% 
+    dplyr::group_by() %>% 
     dplyr::left_join(full_sample_size_df %>%
                        dplyr::mutate(Species_std = standardise_species(Species)) %>% 
                        dplyr::select(-Species),
                      by = "Species_std")
-  full_df <- full_df %>% get_sample_sizes(full_sample_size_df)
-  negexp_df <- negexp_df %>% get_sample_sizes(negexp_sample_size_df)
+  full_df <- full_df %>% get_sample_sizes(full_sample_size_df,rec_df$species)
+  negexp_df <- negexp_df %>% get_sample_sizes(negexp_sample_size_df,rec_df$species)
   
   # Return file datasets
   list(raw_atb = file1_df, full_df = full_df, negexp_df = negexp_df)

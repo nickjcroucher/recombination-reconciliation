@@ -1,3 +1,22 @@
+# Test for significance of differences between models
+parameter_pval <- function(model1 = NULL,model2 = NULL,param = NULL) {
+  # Extract fixed effects coefficients and standard errors from both models
+  beta1 <- fixef(model1)[param]
+  beta2 <- fixef(model2)[param]
+  
+  se1 <- summary(model1)$tTable[param, "Std.Error"]
+  se2 <- summary(model2)$tTable[param, "Std.Error"]
+  
+  # Calculate the Z-statistic
+  z_stat <- (beta1 - beta2) / sqrt(se1^2 + se2^2)
+  
+  # Get the two-tailed p-value
+  p_value <- 2 * (1 - pnorm(abs(z_stat)))
+  
+  # Print results
+  return(as.numeric(p_value))
+}
+
 # Function to calculate predictions from fixed effects
 predict_fixed <- function(beta, newdata) {
   
@@ -20,14 +39,13 @@ predict_fixed <- function(beta, newdata) {
 
 # Prediction function using the fitted model's fixed effects
 pred_fun <- function(beta, newdata, fit_mixed) {
-  
-  names(beta) <- names(fixef(fit_mixed))
+  names(beta) <- names(nlme::fixef(fit_mixed))
   
   i <- beta["i"]
   j <- beta["j"]
   k <- beta["k"]
   
-  i - (i - j) * exp(k * newdata$Core)
+  as.vector(i - (i - j) * exp(k * newdata$Core))
 }
 
 fit_nlme_model <- function(in_df) {
@@ -64,45 +82,59 @@ fit_nlme_model <- function(in_df) {
   
 }
 
-make_nlme_prediction <- function(fit_mixed, in_df) {
+make_nlme_prediction <- function(fit_mixed, in_df,
+                                 prediction_level = 0,
+                                 n_points = 200) {
   
-  pred_grid <- expand_grid(
-    Core = seq(
-      min(in_df$Core, na.rm = TRUE),
-      max(in_df$Core, na.rm = TRUE),
-      length.out = 200
+  # Create prediction grid
+  if (prediction_level == 0) {
+    pred_grid <- data.frame(
+      Core = seq(
+        min(in_df$Core, na.rm = TRUE),
+        max(in_df$Core, na.rm = TRUE),
+        length.out = n_points
+      )
     )
-  )
+  } else {
+    pred_grid <- expand_grid(
+      Core = seq(
+        min(in_df$Core, na.rm = TRUE),
+        max(in_df$Core, na.rm = TRUE),
+        length.out = 200
+      ),
+      species = unique(in_df$species)
+    )
+  }
   
-  # Population-level predictions
-  pred_grid$response <- predict(
-    fit_mixed,
-    newdata = pred_grid,
-    level = 0
-  )
-  
-  # Fixed effects and covariance matrix
-  beta <- fixef(fit_mixed)
+  # Fixed-effect estimates and covariance matrix
+  beta <- nlme::fixef(fit_mixed)
   V <- vcov(fit_mixed)
   
-  # Numerical Jacobian
-  J <- jacobian(
-    func = function(b) pred_fun(b, pred_grid, fit_mixed),
+  # Population-level predictions
+  predictions <- predict(
+    fit_mixed,
+    newdata = pred_grid,
+    level = prediction_level
+  )
+  
+  # Jacobian of predictions with respect to fixed effects
+  J <- numDeriv::jacobian(
+    func = function(b) {
+      pred_fun(b, pred_grid, fit_mixed)
+    },
     x = beta
   )
   
-  # Prediction variance
-  pred_var <- diag(J %*% V %*% t(J))
-  
-  # Standard errors
-  pred_se <- sqrt(pred_var)
+  # Delta-method standard errors
+  pred_se <- sqrt(
+    pmax(0, diag(J %*% V %*% t(J)))
+  )
   
   # 95% confidence intervals
-  pred_grid <- pred_grid %>%
-    mutate(
-      asymp.LCL = response - 1.96 * pred_se,
-      asymp.UCL = response + 1.96 * pred_se
-    )
+  pred_grid$fit <- predictions
+  pred_grid$se <- pred_se
+  pred_grid$lower <- predictions - 1.96 * pred_se
+  pred_grid$upper <- predictions + 1.96 * pred_se
   
-  return(pred_grid)
+  pred_grid
 }
