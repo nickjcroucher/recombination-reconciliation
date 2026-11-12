@@ -672,6 +672,8 @@ p_summary <-
         alpha = 0.75,
         inherit.aes = FALSE
     ) +
+    xlab("Pairwise core genome distance") +
+    ylab("Pairwise accessory distance") +
     theme_bw() +
     theme(legend.position = "bottom")
 
@@ -722,9 +724,10 @@ nlme_species_prediction_df <- dplyr::bind_rows(
         alpha = 0.75,
         inherit.aes = FALSE
     ) +
-  ylab("Pairwise accessory distances") +
-  xlab("Pairwise core distances") +
+  ylab("Pairwise accessory genome distance") +
+  xlab("Pairwise core genome distance") +
   facet_wrap(~species) +
+  theme_bw() +
   theme(strip.background = element_blank(),
         strip.text = element_text(face = "italic", size = 10),
         legend.position = "bottom")
