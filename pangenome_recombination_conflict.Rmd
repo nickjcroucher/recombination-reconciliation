@@ -433,31 +433,11 @@ core_threshold <- 0.005
 accessory_threshold <- 0.4
 
 # Directory containing the files
-# dist_tar <- "Sample_PopPUNK_distance.tar.gz"
-# dist_files <- utils::untar(dist_tar, list = TRUE)
-# dist_files <- dist_files[grepl("\\.txt$", dist_files, ignore.case = TRUE)]
-# data_dir <- "./Sample_PopPUNK_distance/"
-# utils::untar(dist_tar, files = dist_files)
 dist_tar <- "Sample_PopPUNK_distance.tar.gz"
-
-cat("Archive size:", file.info(dist_tar)$size / 1024^2, "MB\n",
-    flush = TRUE)
-
-cat("Listing files...\n", flush = TRUE)
-
 dist_files <- utils::untar(dist_tar, list = TRUE)
-
-dist_files <- dist_files[
-  grepl("\\.txt$", dist_files, ignore.case = TRUE)
-]
-
-cat("Found", length(dist_files), "text files\n", flush = TRUE)
-
-cat("Extracting...\n", flush = TRUE)
-
+dist_files <- dist_files[grepl("\\.txt$", dist_files, ignore.case = TRUE)]
+data_dir <- "./Sample_PopPUNK_distance/"
 utils::untar(dist_tar, files = dist_files)
-
-cat("Extraction finished successfully.\n", flush = TRUE)
 
 # Add check for missing files
 missing_files <- dist_files[!file.exists(dist_files)]
