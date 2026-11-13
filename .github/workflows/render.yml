@@ -43,8 +43,6 @@ jobs:
         with:
           path: ${{ env.R_LIBS_USER }}
           key: r-pkg-cache-${{ runner.os }}-r-release-${{ hashFiles('.github/workflows/render.yml') }}
-          restore-keys: |
-            r-pkg-cache-${{ runner.os }}-
 
       - name: Install required R packages
         uses: r-lib/actions/setup-r-dependencies@v2
