@@ -26,6 +26,7 @@ library(emmeans)
 library(glmmTMB)
 library(numDeriv)
 library(nlme)
+library(glmmTMB)
 
 source("R/data_prep.R")
 source("R/helpers.R")
@@ -438,18 +439,42 @@ dist_files <- dist_files[grepl("\\.txt$", dist_files, ignore.case = TRUE)]
 data_dir <- "./Sample_PopPUNK_distance/"
 utils::untar(dist_tar, files = dist_files)
 
+# Add check for missing files
+missing_files <- dist_files[!file.exists(dist_files)]
+
+if (length(missing_files) > 0) {
+  stop(
+    "The following files were not extracted: ",
+    paste(missing_files, collapse = ", ")
+  )
+}
+
 # Read and combine all files
 set.seed(42)
 distances_df <-
-  dist_files %>%
-  purrr::set_names() %>%
   purrr::map_dfr(
-    ~ read_table(
-      .x,
-      col_names = c("Core", "Accessory"),
-      show_col_types = FALSE
-    ),
-    .id = "file"
+  stats::setNames(dist_files, dist_files),
+  function(f) {
+    tryCatch(
+      readr::read_table(
+        f,
+        col_names = c("Core", "Accessory"),
+        col_types = readr::cols(
+          Core = readr::col_double(),
+          Accessory = readr::col_double()
+        ),
+        show_col_types = FALSE
+      ),
+      error = function(e) {
+        stop(
+          "Error reading file: ", f,
+          "\nOriginal error: ", conditionMessage(e),
+          call. = FALSE
+        )
+      }
+    )
+  },
+  .id = "file"
   ) %>%
   dplyr::filter(
     Core < core_threshold & Core > core_min,
