@@ -63,6 +63,7 @@ jobs:
             any::nlme
             any::glmmTMB
             any::performance
+            any::see
 
       - name: Knit main R Markdown document
         run: |
