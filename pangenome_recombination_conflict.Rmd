@@ -27,6 +27,7 @@ library(glmmTMB)
 library(numDeriv)
 library(nlme)
 library(glmmTMB)
+library(performance)
 
 source("R/data_prep.R")
 source("R/helpers.R")
@@ -166,7 +167,7 @@ The same relationship holds for the count of rare accessory genes specifically
 (Supplementary Figure S1), and naturally transformable taxa - which are expected to
 experience more effective chromosomal curing - have significantly smaller
 pangenomes on average, although this difference does not persist once prophage
-density is accounted for (Supplementary Figure S2).
+density is accounted for (see joint model below).
 
 ```{r rare-genes-vs-lambda, fig.width = 7, fig.height = 5.5}
 res_raregenes <- plot_correlation(
@@ -224,12 +225,29 @@ N'Guessan et al. 2021). If prophage density were the dominant driver of this
 compartment structure, the proportion of fast genes should track `lambda_hat`
 directly.
 
-```{r propfast-vs-lambda, fig.width = 7, fig.height = 5.5}
+```{r propfast-vs-lambda model check, fig.width = 11, fig.height = 8}
+
+propfast_lambda_mod <-
+  fit_beta_model(
+    df = full_df,
+    x_var = "lambda_hat",
+    y_var = "prop_genes2_median",
+    zi_var="1",
+    disp_var="lambda_hat"
+  )
+
+performance::check_model(propfast_lambda_mod)
+
+```
+
+``` {r propfast-vs-lambda, fig.width = 7, fig.height = 5.5}
+
 res_propfast_lambda <- plot_correlation(
   full_df,
   x_var = "lambda_hat", y_var = "prop_genes2_median",
   x_lab = "Expected number of intact Caudoviricetes prophage per genome",
-  y_lab = "Proportion of fast genes"
+  y_lab = "Proportion of fast genes",
+  model = propfast_lambda_mod
 )
 res_propfast_lambda$plot
 fit_propfast_lambda <- res_propfast_lambda$fit
@@ -244,12 +262,28 @@ core-vs-accessory distance curve (Horsfield et al.'s instantaneous gene turnover
 rate; Supplementary File 8), which is also not significantly related to prophage
 density on its own:
 
+```{r res-vs-yint model check, fig.width = 11, fig.height = 8}
+
+res_yint_mod <-
+  fit_beta_model(
+    df = negexp_df,
+    x_var = "lambda_hat",
+    y_var = "`Proportion fast genes_Median`",
+    zi_var="1",
+    disp_var="lambda_hat"
+  )
+
+performance::check_model(res_yint_mod)
+
+```
+
 ```{r yintercept-raw-vs-lambda, fig.width = 7, fig.height = 5.5}
 res_yint_raw <- plot_correlation(
   negexp_df,
   x_var = "lambda_hat", y_var = "Proportion fast genes_Median",
   x_lab = "Expected number of intact Caudoviricetes prophage per genome",
-  y_lab = "Y-intercept of core/accessory distance curve"
+  y_lab = "Y-intercept of core/accessory distance curve",
+  model = res_yint_mod
 )
 res_yint_raw$plot
 fit_yint_raw <- res_yint_raw$fit
@@ -283,7 +317,7 @@ scaled y intercept:
 res_yint_scaled <- plot_correlation(
   negexp_df,
   x_var = "Recombination probability", y_var = "yint_times_genome",
-  x_lab = "Expected number of intact Caudoviricetes prophage per genome",
+  x_lab = "Probability of core genome diversification through recombination",
   y_lab = "y intercept \u00d7 genome size (No. of 'fast' genes)"
 )
 res_yint_scaled$plot
@@ -295,12 +329,28 @@ fit_yint_scaled <- res_yint_scaled$fit
 Rather than prophage density, the proportion of fast genes is far better explained
 by the probability of diversification through homologous recombination:
 
+```{r hr-vs-yint model check, fig.width = 11, fig.height = 8}
+
+res_propfast_hr_mod <-
+  fit_beta_model(
+    df = full_df,
+    x_var = "`Recombination probability`",
+    y_var = "prop_genes2_median",
+    zi_var="1",
+    disp_var="`Recombination probability`"
+  )
+
+performance::check_model(res_propfast_hr_mod)
+
+```
+
 ```{r propfast-vs-hr, fig.width = 7, fig.height = 5.5}
 res_propfast_hr <- plot_correlation(
   full_df,
   x_var = "Recombination probability", y_var = "prop_genes2_median",
   x_lab = "Probability of diversification through homologous recombination",
-  y_lab = "Proportion of fast genes"
+  y_lab = "Proportion of fast genes",
+  model = res_propfast_hr_mod
 )
 res_propfast_hr$plot
 fit_propfast_hr <- res_propfast_hr$fit
@@ -325,13 +375,27 @@ alone fails to capture this relationship directly.
 The same contrast holds for the basal (slow-compartment) gene turnover rate, which
 is at best marginally related to prophage density on its own:
 
+```{r baseturnover-vs-lambda model check, fig.width = 11, fig.height = 8}
+
+baseturnover_lambda_mod <-
+  fit_beta_model(
+    df = full_df,
+    x_var = "lambda_hat",
+    y_var = "rate_genes1_median"
+  )
+
+performance::check_model(baseturnover_lambda_mod)
+
+```
+
 ```{r baseturnover-vs-lambda, fig.width = 7, fig.height = 5.5}
 res_baseturnover_lambda <- plot_correlation(
   full_df,
   x_var = "lambda_hat", y_var = "rate_genes1_median",
   x_lab = "Expected number of intact Caudoviricetes prophage per genome",
   y_lab = "Basal gene turnover rate",
-  ylim  = c(0, 0.0025)
+  ylim  = c(0, 0.0025),
+  model = baseturnover_lambda_mod
 )
 res_baseturnover_lambda$plot
 fit_baseturnover_lambda <- res_baseturnover_lambda$fit
@@ -344,15 +408,30 @@ emphasise the bulk of taxa; *H. influenzae* and *Neisseria* spp. have markedly
 wider credible intervals that extend off the top of this view (the regression line
 and statistics shown are fitted to the full, untruncated data).
 
+```{r baseturnover-vs-hr model check, fig.width = 11, fig.height = 8}
+
+baseturnover_hr_mod <-
+  fit_beta_model(
+    df = full_df,
+    x_var = "`Recombination probability`",
+    y_var = "rate_genes1_median"
+  )
+
+performance::check_model(baseturnover_hr_mod)
+
+```
+
 ```{r baseturnover-vs-hr, fig.width = 7, fig.height = 5.5}
 res_baseturnover_hr <- plot_correlation(
   full_df,
   x_var = "Recombination probability", y_var = "rate_genes1_median",
   x_lab = "Probability of diversification through homologous recombination",
-  y_lab = "Basal gene turnover rate"
+  y_lab = "Basal gene turnover rate",
+  model = baseturnover_hr_mod
 )
 res_baseturnover_hr$plot <-
   res_baseturnover_hr$plot + scale_y_continuous(limits = c(0, 0.002), oob = scales::squish)
+res_baseturnover_hr$plot
 fit_baseturnover_hr <- res_baseturnover_hr$fit
 ```
 

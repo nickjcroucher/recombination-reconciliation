@@ -76,7 +76,7 @@ safe_num <- function(x, digits = 3) {
 
 #' Build a single parenthesised plotmath relation, e.g. "(italic(r) == 0.85)"
 plotmath_relation <- function(name_expr, value, digits = 3) {
-  paste0("(", name_expr, " == ", safe_num(value, digits), ")")
+  paste0("{", name_expr, " == ", safe_num(value, digits), "}")
 }
 
 #' Combine multiple "name == value" relations into one valid, parse()-safe
@@ -178,7 +178,8 @@ plot_correlation <- function(df,
                              colour_var  = "Transformability",
                              shape_var   = "Niche",
                              ylim        = NULL,
-                             label_digits = 3) {
+                             label_digits = 3,
+                             model = NULL) {
 
   plot_df <- df %>% dplyr::filter(!is.na(.data[[x_var]]), !is.na(.data[[y_var]]))
 
@@ -214,9 +215,30 @@ plot_correlation <- function(df,
     )
   }
 
+  if (is.null(model)) {
+    p <- p +
+      geom_smooth(aes(group = 1), method = "lm", formula = y ~ x,
+                  colour = "black", fill = "grey60", linewidth = 0.8, alpha = 0.25)
+  } else {
+    model_pred <-
+      get_model_pred(df,model,x_var)
+    p <- p +
+      geom_ribbon(
+        data = model_pred,
+        aes(x = .data[[x_var]], ymin = lower, ymax = upper),
+        inherit.aes = FALSE,
+        fill = "grey60",
+        alpha = 0.25
+      ) +
+      geom_line(
+        data = model_pred,
+        aes(x = .data[[x_var]], y = fit),
+        inherit.aes = FALSE,
+        colour = "black",
+        linewidth = 0.8
+      )
+  }
   p <- p +
-    geom_smooth(aes(group = 1), method = "lm", formula = y ~ x,
-               colour = "black", fill = "grey60", linewidth = 0.8, alpha = 0.25) +
     geom_point(aes(colour = .data[[colour_var]], shape = .data[[shape_var]]),
               size = 2.5) +
     ggrepel::geom_label_repel(

@@ -138,3 +138,53 @@ make_nlme_prediction <- function(fit_mixed, in_df,
   
   pred_grid
 }
+
+fit_beta_model <- function(df,x_var,y_var,zi_var="0",disp_var="1") {
+  
+  glm_mod<-glmmTMB::glmmTMB(
+    as.formula(paste(y_var,"~",x_var)),
+    data = df,
+    ziformula = as.formula(paste("~",zi_var)),
+    dispformula = as.formula(paste("~",disp_var)),
+    family = glmmTMB::beta_family(link = "logit")
+  )
+  
+}
+
+get_model_pred <- function(in_df, model, x_var) {
+  
+  # Remove missing/non-finite predictor values
+  x_values <- in_df[[x_var]]
+  x_values <- x_values[is.finite(x_values)]
+  
+  # Create prediction data across observed range
+  pred_df <- data.frame(
+    seq(
+      min(x_values),
+      max(x_values),
+      length.out = 200
+    )
+  )
+  
+  names(pred_df) <- x_var
+  
+  # Predict fitted values and standard errors
+  pred <- predict(
+    model,
+    newdata = pred_df,
+    type = "response",
+    se.fit = TRUE,
+    re.form = NA
+  )
+  
+  # Add predictions and confidence intervals
+  pred_df <- pred_df %>%
+    dplyr::mutate(
+      fit = as.numeric(pred$fit),
+      se = as.numeric(pred$se.fit),
+      lower = pmax(0, fit - 1.96 * se),
+      upper = pmin(1, fit + 1.96 * se)
+    )
+  
+  return(pred_df)
+}

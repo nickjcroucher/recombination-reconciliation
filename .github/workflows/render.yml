@@ -62,6 +62,7 @@ jobs:
             any::numDeriv
             any::nlme
             any::glmmTMB
+            any::performance
 
       - name: Knit main R Markdown document
         run: |
