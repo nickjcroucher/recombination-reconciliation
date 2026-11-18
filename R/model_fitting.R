@@ -151,11 +151,45 @@ fit_beta_model <- function(df,x_var,y_var,zi_var="0",disp_var="1") {
   
 }
 
-get_model_pred <- function(in_df, model, x_var) {
+fit_lognormal_model <- function(df, x_var, y_var,
+                                zi_var = "0", disp_var = "1") {
+  
+  # Construct the main formula from column names
+  model_formula <- stats::as.formula(
+    call("~", as.name(y_var), as.name(x_var))
+  )
+  
+  # Helper to construct zero-inflation and dispersion formulas
+  make_formula <- function(var) {
+    
+    if (var %in% c("0", "1")) {
+      stats::as.formula(paste("~", var))
+    } else {
+      stats::as.formula(call("~", as.name(var)))
+    }
+    
+  }
+  
+  glm_mod <- glmmTMB::glmmTMB(
+    formula = model_formula,
+    data = df,
+    ziformula = make_formula(zi_var),
+    dispformula = make_formula(disp_var),
+    family = gaussian(link = "log")
+  )
+  
+  return(glm_mod)
+}
+
+get_model_pred <- function(in_df, model, x_var, level = 0.95) {
   
   # Remove missing/non-finite predictor values
   x_values <- in_df[[x_var]]
   x_values <- x_values[is.finite(x_values)]
+  
+  if (length(x_values) == 0) {
+    stop("No finite values found for predictor: ", x_var)
+  }
   
   # Create prediction data across observed range
   pred_df <- data.frame(
@@ -168,22 +202,46 @@ get_model_pred <- function(in_df, model, x_var) {
   
   names(pred_df) <- x_var
   
-  # Predict fitted values and standard errors
-  pred <- predict(
-    model,
-    newdata = pred_df,
-    type = "response",
-    se.fit = TRUE,
-    re.form = NA
+  # Fixed-effect estimates and covariance matrix
+  beta <- glmmTMB::fixef(model)$cond
+  V <- as.matrix(vcov(model)$cond)
+  
+  # Extract the fitted model's conditional formula
+  model_formula <- stats::formula(model)
+  
+  # Build model matrix using the actual fitted formula
+  model_terms <- stats::delete.response(
+    stats::terms(model_formula)
   )
   
-  # Add predictions and confidence intervals
+  X <- stats::model.matrix(
+    model_terms,
+    data = pred_df
+  )
+  
+  # Ensure columns match the fixed-effect coefficients
+  X <- X[, names(beta), drop = FALSE]
+  
+  # Linear predictor and standard error on link scale
+  eta <- as.vector(X %*% beta)
+  
+  se_eta <- sqrt(
+    pmax(0, diag(X %*% V %*% t(X)))
+  )
+  
+  # Confidence interval multiplier
+  z <- qnorm(1 - (1 - level) / 2)
+  
+  # Inverse link function
+  linkinv <- family(model)$linkinv
+  
+  # Predictions and confidence intervals on response scale
   pred_df <- pred_df %>%
     dplyr::mutate(
-      fit = as.numeric(pred$fit),
-      se = as.numeric(pred$se.fit),
-      lower = pmax(0, fit - 1.96 * se),
-      upper = pmin(1, fit + 1.96 * se)
+      fit = linkinv(eta),
+      se = se_eta,
+      lower = linkinv(eta - z * se_eta),
+      upper = linkinv(eta + z * se_eta)
     )
   
   return(pred_df)
