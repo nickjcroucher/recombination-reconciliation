@@ -327,7 +327,8 @@ res_yint_scaled <- plot_correlation(
   y_lab = "y intercept \u00d7 genome size (No. of 'fast' genes)",
   model = res_yint_scaled_mod
 )
-res_yint_scaled$plot
+(res_yint_scaled$plot <-
+  res_yint_scaled$plot + ylim(c(0,2750)))
 fit_yint_scaled <- res_yint_scaled$fit
 ```
 
@@ -354,15 +355,15 @@ performance::check_model(hr_yint_scaled_mod)
 ```
 
 ```{r yintercept-scaled-vs-HR, fig.width = 7, fig.height = 5.5}
-res_yint_scaled <- plot_correlation(
+hr_yint_scaled <- plot_correlation(
   negexp_df,
   x_var = "Recombination probability", y_var = "yint_times_genome",
   x_lab = "Probability of core genome diversification through recombination",
   y_lab = "y intercept \u00d7 genome size (No. of 'fast' genes)",
   model = hr_yint_scaled_mod
 )
-res_yint_scaled$plot
-fit_yint_scaled <- res_yint_scaled$fit
+hr_yint_scaled$plot
+hr_yint_scaled <- res_yint_scaled$fit
 ```
 
 ## 3. Fast gene proportion tracks recombination probability, not prophage density
